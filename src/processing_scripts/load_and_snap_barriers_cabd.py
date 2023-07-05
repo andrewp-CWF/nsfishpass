@@ -24,6 +24,7 @@ import subprocess
 import psycopg2 as pg2
 import psycopg2.extras
 import json, urllib.request, requests
+from appconfig import dataSchema
 
 iniSection = appconfig.args.args[0]
 
@@ -38,23 +39,29 @@ nhnWatershedId = appconfig.config[iniSection]['nhn_watershed_id']
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
+with appconfig.connectdb() as conn:
+
+    query = f"""
+    SELECT code
+    FROM {dataSchema}.{appconfig.fishSpeciesTable};
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+        specCodes = cursor.fetchall()
+
 def main():
     
     with appconfig.connectdb() as conn:
         # creates barriers table with attributes from CABD and crossings table
         query = f"""
-            --create an archive table so we can keep ids stable
-            --archive table will be used after loading assessment data
-            --DROP TABLE IF EXISTS {dbTargetSchema}.{dbBarrierTable}_archive;
-            --CREATE TABLE {dbTargetSchema}.{dbBarrierTable}_archive AS SELECT * FROM {dbTargetSchema}.{dbBarrierTable};
-            
             DROP TABLE IF EXISTS {dbTargetSchema}.{dbBarrierTable};
 
             create table if not exists {dbTargetSchema}.{dbBarrierTable} (
                 id uuid not null default gen_random_uuid(),
                 cabd_id uuid,
                 modelled_id uuid,
-                assessment_id uuid,
+                update_id varchar,
                 original_point geometry(POINT, {appconfig.dataSrid}),
                 snapped_point geometry(POINT, {appconfig.dataSrid}),
                 name varchar(256),
@@ -81,18 +88,10 @@ def main():
                 culvert_number varchar,
                 structure_id varchar,
                 date_examined date,
-                examiners varchar,
                 road varchar,
-                structure_type varchar,
+                culvert_type varchar,
                 culvert_condition varchar,
                 action_items varchar,
-
-                barriers_upstr varchar[],
-                barriers_downstr varchar[],
-                barrier_cnt_upstr integer,
-                barrier_cnt_downstr integer,
-                gradient_barrier_cnt_upstr integer,
-                gradient_barrier_cnt_downstr integer,
 
                 primary key (id)
             );
@@ -184,7 +183,7 @@ def main():
                 type)
             SELECT
                 ST_Force2D(geometry),
-                'UNKNOWN',
+                'BARRIER',
                 'beaver_activity'
             FROM
                 {dbTargetSchema}.{dbTempTable};
@@ -198,6 +197,38 @@ def main():
         conn.commit()
         
         print("Loading beaver activity data complete")
+
+        # add species-specific passability fields
+        for species in specCodes:
+            code = species[0]
+
+            colname = "passability_status_" + code
+            
+            query = f"""
+                alter table {dbTargetSchema}.{dbBarrierTable} 
+                add column if not exists {colname} numeric;
+    
+                update {dbTargetSchema}.{dbBarrierTable}
+                set {colname} = 
+                    CASE
+                    WHEN passability_status = 'BARRIER' THEN 0
+                    WHEN passability_status = 'UNKNOWN' THEN 0
+                    WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
+                    WHEN passability_status = 'PASSABLE' THEN 1
+                    ELSE NULL END;
+            """
+
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+        
+        query = f"""
+            alter table {dbTargetSchema}.{dbBarrierTable} 
+            drop column if exists passability_status;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
 
     print("Loading barrier data complete")
 

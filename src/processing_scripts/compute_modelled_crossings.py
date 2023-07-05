@@ -22,10 +22,12 @@
 # from the stream network
 #
 import appconfig
+from appconfig import dataSchema
 
 iniSection = appconfig.args.args[0]
 
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
+dbWatershedId = appconfig.config[iniSection]['watershed_id']
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbModelledCrossingsTable = appconfig.config['CROSSINGS']['modelled_crossings_table']
@@ -35,6 +37,18 @@ railTable = appconfig.config['CREATE_LOAD_SCRIPT']['rail_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
     
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
+snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
+
+with appconfig.connectdb() as conn:
+
+    query = f"""
+    SELECT code
+    FROM {dataSchema}.{appconfig.fishSpeciesTable};
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+        specCodes = cursor.fetchall()
 
 def tableExists(connection):
 
@@ -58,8 +72,8 @@ def createTable(connection):
 
     if result:
 
+        # create an archive table so we can keep modelled_id stable
         query = f"""
-            --create an archive table so we can keep modelled_id stable
             DROP TABLE IF EXISTS {dbTargetSchema}.{dbModelledCrossingsTable}_archive;
             CREATE TABLE {dbTargetSchema}.{dbModelledCrossingsTable}_archive 
             AS SELECT * FROM {dbTargetSchema}.{dbModelledCrossingsTable};
@@ -72,9 +86,7 @@ def createTable(connection):
                 strahler_order integer,
                 stream_id uuid, 
                 transport_feature_name varchar,
-                
-                passability_status varchar,
-                
+              
                 crossing_status varchar,
                 crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'TRAIL')),
                 crossing_type varchar,
@@ -89,6 +101,20 @@ def createTable(connection):
     
         with connection.cursor() as cursor:
             cursor.execute(query)
+        
+        # add species-specific passability fields
+        for species in specCodes:
+            code = species[0]
+
+            colname = "passability_status_" + code
+            
+            query = f"""
+                alter table {dbTargetSchema}.{dbModelledCrossingsTable} 
+                add column if not exists {colname} numeric;
+            """
+
+            with connection.cursor() as cursor:
+                cursor.execute(query)
     
     else:
         query = f"""
@@ -101,8 +127,6 @@ def createTable(connection):
                 stream_id uuid, 
                 transport_feature_name varchar,
                 
-                passability_status varchar,
-                
                 crossing_status varchar,
                 crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'TRAIL')),
                 crossing_type varchar,
@@ -117,6 +141,20 @@ def createTable(connection):
     
         with connection.cursor() as cursor:
             cursor.execute(query)
+
+        # add species-specific passability fields 
+        for species in specCodes:
+            code = species[0]
+
+            colname = "passability_status_" + code
+            
+            query = f"""
+                alter table {dbTargetSchema}.{dbModelledCrossingsTable} 
+                add column if not exists {colname} numeric;
+            """
+
+            with connection.cursor() as cursor:
+                cursor.execute(query)
 
 def computeCrossings(connection):
         
@@ -213,14 +251,63 @@ def computeAttributes(connection):
     query = f"""
         UPDATE {dbTargetSchema}.{dbModelledCrossingsTable}
         SET crossing_status = 'MODELLED';
-        
-        UPDATE {dbTargetSchema}.{dbModelledCrossingsTable}
-        SET passability_status = 'UNKNOWN'
-        WHERE passability_status IS NULL;
     """
-    #print(query)
     with connection.cursor() as cursor:
         cursor.execute(query)
+    
+    for species in specCodes:
+        code = species[0]
+
+        colname = "passability_status_" + code
+            
+        query = f"""
+            UPDATE {dbTargetSchema}.{dbModelledCrossingsTable}
+            SET {colname} = 0 WHERE {colname} IS NULL;
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+
+def loadToBarriers(connection):
+
+    newCols = []
+
+    for species in specCodes:
+        code = species[0]
+
+        col = "passability_status_" + code
+        newCols.append(col)
+    
+    colString = ','.join(newCols)
+
+    query = f"""
+        DELETE FROM {dbTargetSchema}.{dbBarrierTable} WHERE type = 'stream_crossing';
+        
+        INSERT INTO {dbTargetSchema}.{dbBarrierTable}(
+            modelled_id, snapped_point,
+            type, {colString},
+            stream_name, strahler_order, stream_id, 
+            transport_feature_name, crossing_status,
+            crossing_feature_type, crossing_type,
+            crossing_subtype
+        )
+        SELECT 
+            modelled_id, geometry,
+            'stream_crossing', {colString},
+            stream_name, strahler_order, stream_id, 
+            transport_feature_name, crossing_status,
+            crossing_feature_type, crossing_type,
+            crossing_subtype
+        FROM {dbTargetSchema}.{dbModelledCrossingsTable};
+
+        UPDATE {dbTargetSchema}.{dbBarrierTable} SET wshed_name = '{dbWatershedId}';
+        
+        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+    connection.commit()
 
 def main():                        
     #--- main program ---    
@@ -249,6 +336,9 @@ def main():
 
             print("  calculating modelled crossing attributes")
             computeAttributes(conn)
+
+            print("  loading to barriers table")
+            loadToBarriers(conn)
             
             conn.commit()
         
@@ -261,6 +351,9 @@ def main():
 
             print("  calculating modelled crossing attributes")
             computeAttributes(conn)
+
+            print("  loading to barriers table")
+            loadToBarriers(conn)
             
             conn.commit()
                 
