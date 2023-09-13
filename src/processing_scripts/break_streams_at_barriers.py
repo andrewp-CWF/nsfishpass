@@ -196,7 +196,7 @@ def breakstreams (conn):
         ),
         newlines as (
             SELECT {appconfig.dbIdField},
-                st_split(st_snap(geometry, rawpnt, 0.01), rawpnt) as geometry
+                st_split(st_snap(geometry, rawpnt, 0.001), rawpnt) as geometry
             FROM breakpoints 
         )
         
@@ -236,7 +236,7 @@ def breakstreams (conn):
     
     """
         
-    #print(query)
+    # print(query)
         
     with conn.cursor() as cursor:
         cursor.execute(query)
@@ -252,8 +252,8 @@ def recomputeMainstreamMeasure(connection):
         ),
         measures AS (
             SELECT 
-                (st_linelocatepoint ( b.geometry, st_startpoint(a.geometry)) * st_length(b.geometry)) / 1000.0 as startpct, 
-                (st_linelocatepoint ( b.geometry, st_endpoint(a.geometry)) * st_length(b.geometry))  / 1000.0 as endpct,
+                (st_linelocatepoint(b.geometry, st_startpoint(a.geometry)) * st_length(b.geometry)) / 1000.0 as startpct, 
+                (st_linelocatepoint(b.geometry, st_endpoint(a.geometry)) * st_length(b.geometry))  / 1000.0 as endpct,
                 a.id
             FROM {dbTargetSchema}.{dbTargetStreamTable} a, mainstems b
             WHERE a.mainstem_id = b.mainstem_id
@@ -280,8 +280,8 @@ def updateBarrier(connection):
             SELECT a.id as stream_id, b.id as barrier_id
             FROM {dbTargetSchema}.{dbTargetStreamTable} a,
                 {dbTargetSchema}.{dbBarrierTable} b
-            WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-                st_intersects(st_endpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
+            WHERE st_dwithin(a.geometry, b.snapped_point, 0.01) and
+                st_dwithin(st_endpoint(a.geometry), b.snapped_point, 0.01)
         )
         UPDATE {dbTargetSchema}.{dbBarrierTable}
             SET stream_id_up = a.stream_id
@@ -296,15 +296,15 @@ def updateBarrier(connection):
             SELECT a.id as stream_id, b.id as barrier_id
             FROM {dbTargetSchema}.{dbTargetStreamTable} a,
                 {dbTargetSchema}.{dbBarrierTable} b
-            WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-                st_intersects(st_startpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
+            WHERE st_dwithin(a.geometry, b.snapped_point, 0.01) and
+                st_dwithin(st_endpoint(a.geometry), b.snapped_point, 0.01)
         )
         UPDATE {dbTargetSchema}.{dbBarrierTable}
             SET stream_id_down = a.stream_id
             FROM ids a
             WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
     """
-    
+    # print(query)
     with connection.cursor() as cursor:
         cursor.execute(query)
     connection.commit()           

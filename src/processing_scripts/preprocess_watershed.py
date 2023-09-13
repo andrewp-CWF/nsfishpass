@@ -20,15 +20,39 @@
 # ASSUMPTION - data is in equal area projection where distance functions return values in metres
 #
 import appconfig
+import ast
 
 iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
-workingWatershedId = appconfig.config[iniSection]['watershed_id']
+
+workingWatershedId = ast.literal_eval(appconfig.config[iniSection]['watershed_id'])
+workingWatershedId = [x.upper() for x in workingWatershedId]
+workingWatershedId = tuple(workingWatershedId)
+
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
 
+publicSchema = "public"
+aoi = "chyf_aoi"
+aoiTable = publicSchema + "." + aoi
+
 def main():
+
     with appconfig.connectdb() as conn:
+
+        query = f"""
+        SELECT id::varchar FROM {aoiTable} WHERE short_name IN {workingWatershedId};
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            ids = cursor.fetchall()
+
+        aoi_ids = []
+        
+        for x in ids:
+            aoi_ids.append(x[0])
+
+        aoi_ids = tuple(aoi_ids)
         
         query = f"""
             CREATE SCHEMA IF NOT EXISTS {dbTargetSchema};
@@ -54,27 +78,22 @@ def main():
             ALTER DEFAULT PRIVILEGES IN SCHEMA {dbTargetSchema} GRANT SELECT ON TABLES TO public;
 
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
-                ({appconfig.dbIdField}, source_id,
-                {appconfig.dbWatershedIdField}, 
+                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, 
                 stream_name, strahler_order, geometry)
-            SELECT gen_random_uuid(), id,
-                aoi_id,
-                stream_name, strahler_order,
-                CASE
-                WHEN ST_WITHIN(t1.geometry,t2.geometry)
-                THEN t1.geometry
-                ELSE ST_Intersection(t1.geometry, t2.geometry)
-                END AS geometry
+            SELECT gen_random_uuid(), id, aoi_id,
+                rivername1, strahler_order,
+                (ST_Dump((ST_Intersection(t1.geometry, t2.geometry)))).geom
             FROM {appconfig.dataSchema}.{appconfig.streamTable} t1
             JOIN {appconfig.dataSchema}.{appconfig.watershedTable} t2 ON ST_Intersects(t1.geometry, t2.geometry)
-            WHERE aoi_id = '{workingWatershedId}'
-            AND strahler_order IS NOT NULL;
+            WHERE aoi_id IN {aoi_ids};
 
             -------------------------
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set segment_length = st_length2d(geometry) / 1000.0;
             ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} add column geometry_original geometry(LineString, {appconfig.dataSrid});
-            update {dbTargetSchema}.{dbTargetStreamTable} set geometry_original = geometry;
-            update {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry_original = geometry;
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
+
+            DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} WHERE ST_IsEmpty(geometry);
             -------------------------
             
             --TODO: remove this when values are provided
@@ -83,10 +102,9 @@ def main():
             
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {appconfig.streamTableChannelConfinementField} = floor(random() * 100);
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {appconfig.streamTableDischargeField} = floor(random() * 100);
-            
        
         """
-        # print(query)
+        
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

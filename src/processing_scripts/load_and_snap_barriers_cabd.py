@@ -20,39 +20,36 @@
 # Loads dam barriers from the CABD API into local database
 #
 import appconfig
-import subprocess
-import psycopg2 as pg2
-import psycopg2.extras
-import json, urllib.request, requests
+import json, urllib.request
 from appconfig import dataSchema
+import ast
 
 iniSection = appconfig.args.args[0]
 
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbWatershedId = appconfig.config[iniSection]['watershed_id']
-beaverData = appconfig.config[iniSection]['beaver_data']
-dbTempTable = 'beaver_activity_' + dbWatershedId
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 workingWatershedId = appconfig.config[iniSection]['watershed_id']
-nhnWatershedId = appconfig.config[iniSection]['nhn_watershed_id']
+nhnWatershedId = ast.literal_eval(appconfig.config[iniSection]['nhn_watershed_id'])
+nhnWatershedId = ','.join(nhnWatershedId)
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
-
-with appconfig.connectdb() as conn:
-
-    query = f"""
-    SELECT code
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
-
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        specCodes = cursor.fetchall()
+fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
 
 def main():
     
     with appconfig.connectdb() as conn:
+
+        query = f"""
+        SELECT code
+        FROM {appconfig.dataSchema}.{fishSpeciesTable};
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            specCodes = cursor.fetchall()
+
         # creates barriers table with attributes from CABD and crossings table
         query = f"""
             DROP TABLE IF EXISTS {dbTargetSchema}.{dbBarrierTable};
@@ -102,7 +99,7 @@ def main():
         conn.commit()
 
         # retrieve barrier data from CABD API
-        url = f"https://cabd-web.azurewebsites.net/cabd-api/features/dams?&filter=nhn_watershed_id:eq:{nhnWatershedId}&filter=use_analysis:eq:true"
+        url = f"https://cabd-web.azurewebsites.net/cabd-api/features/dams?&filter=nhn_watershed_id:in:{nhnWatershedId}&filter=use_analysis:eq:true"
         response = urllib.request.urlopen(url)
         data = json.loads(response.read())
 
@@ -157,7 +154,7 @@ def main():
             SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
 
             --remove any dam features not snapped to streams
-            --because using nhn_watershed_id can cover multiple HUC8 watersheds
+            --because using nhn_watershed_id can cover multiple watersheds
             DELETE FROM {dbTargetSchema}.{dbBarrierTable}
             WHERE snapped_point IS NULL
             AND type = 'dam';
@@ -167,36 +164,6 @@ def main():
         conn.commit()
          
         print("Loading barriers from CABD dataset complete")
-
-        # add beaver activity data and snap to network
-        
-        orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
-
-        pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nln "' + dbTargetSchema + '.' + dbTempTable + '" -lco GEOMETRY_NAME=geometry "' + beaverData + '" -oo EMPTY_STRING_AS_NULL=YES'
-        # print(pycmd)
-        subprocess.run(pycmd)
-
-        query = f"""
-            INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
-                original_point,
-                passability_status,
-                type)
-            SELECT
-                ST_Force2D(geometry),
-                'BARRIER',
-                'beaver_activity'
-            FROM
-                {dbTargetSchema}.{dbTempTable};
-
-            SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
-
-            DROP TABLE IF EXISTS {dbTargetSchema}.{dbTempTable};
-        """
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
-        
-        print("Loading beaver activity data complete")
 
         # add species-specific passability fields
         for species in specCodes:

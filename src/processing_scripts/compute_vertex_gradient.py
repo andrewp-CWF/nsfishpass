@@ -109,7 +109,7 @@ def computeVertexGradients(connection):
         drop column {db4dGeomField};
     """
     
-    #print (query)
+    # print(query)
     with connection.cursor() as cursor:
         cursor.execute(query)    
             

@@ -25,62 +25,35 @@ import appconfig
 
 roadTable = appconfig.config['CREATE_LOAD_SCRIPT']['road_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
+railTable = appconfig.config['CREATE_LOAD_SCRIPT']['rail_table']
 
 query = f"""
     drop schema if exists {appconfig.dataSchema} cascade;
 
     CREATE EXTENSION IF NOT EXISTS postgis;
+    CREATE EXTENSION IF NOT EXISTS postgres_fdw;
     
     create schema {appconfig.dataSchema};
     
     create table {appconfig.dataSchema}.{appconfig.streamTable} (
-        id uuid not null,
-        watershed_id varchar,
-        stream_name varchar,
-        strahler_order integer,
-        fish_species varchar,
-        ef_type smallint,
-        ef_subtype smallint,
-        rank smallint,
+        id uuid NOT NULL,
+        aoi_id uuid,
+        ef_type integer,
+        ef_subtype integer,
+        rank integer,
         length double precision,
-        aoi_id varchar,
-        from_nexus_id uuid,
-        to_nexus_id uuid,
-        ecatchment_id uuid,
+        rivernameid1 uuid,
+        rivername1 varchar,
+        rivernameid2 uuid,
+        rivername2 varchar,
+        strahler_order integer,
         graph_id integer,
         mainstem_id uuid,
         max_uplength double precision,
         hack_order integer,
-        horton_order integer,
+        mainstem_seq integer,
         shreve_order integer,
-        objectid integer,
-        enabled integer,
-        hydroid integer,
-        hydrocode varchar(30),
-        reachcode varchar(30),
-        name varchar(100),
-        lengthkm double precision,
-        lengthdown double precision,
-        flowdir integer,
-        ftype varchar(30),
-        edgetype integer,
-        shape_leng double precision,
-        primary_ varchar(50),
-        secondary varchar(50),
-        tertiary varchar(50),
-        label varchar(50),
-        source varchar(50),
-        picture varchar(100),
-        field_date date,
-        stream_sou varchar(50),
-        comment varchar(75),
-        flipped varchar(10),
-        from_node integer,
-        to_node integer,
-        nextdownid integer,
-        fromelev double precision,
-        toelev double precision,
-        geometry geometry(linestring, {appconfig.dataSrid}) not null,
+        geometry geometry(linestring, {appconfig.dataSrid}) NOT NULL,
         primary key(id)
     );
 
@@ -88,7 +61,25 @@ query = f"""
     
     create table {appconfig.dataSchema}.{roadTable} ( 
         id uuid not null,
-        name varchar,
+        fid integer,
+        roadsegid integer,
+        feat_code varchar(254),
+        feat_desc varchar(254),
+        ids integer,
+        segid integer,
+        street varchar(254),
+        mun_id integer,
+        trafficdir integer,
+        traff_desc varchar(254),
+        date_act integer,
+        date_rev integer,
+        structid varchar(254),
+        roadclass varchar(254),
+        roadc_desc varchar(254),
+        rte_no integer,
+        anum varchar(254),
+        owner varchar(254),
+        owner_desc varchar(254),
         geometry geometry(geometry, {appconfig.dataSrid}) not null,
         primary key(id)
     );
@@ -96,13 +87,56 @@ query = f"""
     
     create table {appconfig.dataSchema}.{trailTable} ( 
         id uuid not null,
-        name varchar,
-        status varchar(100),
-        zone varchar(100),
+        fid integer,
+        roadsegid integer,
+        feat_code varchar(254),
+        feat_desc varchar(254),
+        ids integer,
+        segid integer,
+        street varchar(254),
+        mun_id integer,
+        trafficdir integer,
+        traff_desc varchar(254),
+        date_act integer,
+        date_rev integer,
+        structid varchar(254),
+        roadclass varchar(254),
+        roadc_desc varchar(254),
+        rte_no integer,
+        anum varchar(254),
+        owner varchar(254),
+        owner_desc varchar(254),
         geometry geometry(geometry, {appconfig.dataSrid}) not null,
         primary key(id)
     );
     create index {trailTable}_geom_idx on {appconfig.dataSchema}.{trailTable} using gist(geometry);
+
+    create table {appconfig.dataSchema}.{railTable} ( 
+        id uuid not null,
+        fid integer,
+        roadsegid integer,
+        feat_code varchar(254),
+        feat_desc varchar(254),
+        ids integer,
+        segid integer,
+        street varchar(254),
+        mun_id integer,
+        trafficdir integer,
+        traff_desc varchar(254),
+        date_act integer,
+        date_rev integer,
+        structid varchar(254),
+        roadclass varchar(254),
+        roadc_desc varchar(254),
+        rte_no integer,
+        anum varchar(254),
+        owner varchar(254),
+        owner_desc varchar(254),
+        geometry geometry(geometry, {appconfig.dataSrid}) not null,
+        primary key(id)
+    );
+    create index {railTable}_geom_idx on {appconfig.dataSchema}.{railTable} using gist(geometry);
+
     
 """
 
@@ -110,5 +144,66 @@ with appconfig.connectdb() as conn:
     with conn.cursor() as cursor:
         cursor.execute(query)
 
-print (f"""Database schema {appconfig.dataSchema} created and ready for data """)    
-    
+# set up foreign tables to access CHyF data
+query = f"""
+CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_aoi(
+    id uuid NULL,
+    short_name character varying NULL COLLATE pg_catalog."default",
+    full_name character varying NULL COLLATE pg_catalog."default",
+    geometry geometry(Polygon,4617) NULL
+)
+    SERVER chyf_server
+    OPTIONS (schema_name 'chyf2', table_name 'aoi');
+
+GRANT SELECT ON TABLE public.chyf_aoi TO PUBLIC;
+
+CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_flowpath(
+    id uuid NULL,
+    aoi_id uuid NULL,
+    ef_type integer NULL,
+    ef_subtype integer NULL,
+    rank integer NULL,
+    length double precision NULL,
+    rivernameid1 uuid NULL,
+    rivernameid2 uuid NULL,
+    geometry geometry(LineString,4617) NULL
+)
+    SERVER chyf_server
+    OPTIONS (schema_name 'chyf2', table_name 'eflowpath');
+
+GRANT SELECT ON TABLE public.chyf_flowpath TO PUBLIC;
+
+CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_flowpath_properties(
+    id uuid NULL,
+    aoi_id uuid NULL,
+    strahler_order integer NULL,
+    graph_id integer NULL,
+    mainstem_id uuid NULL,
+    max_uplength double precision NULL,
+    hack_order integer NULL,
+    mainstem_seq integer NULL,
+    shreve_order integer NULL
+)
+    SERVER chyf_server
+    OPTIONS (schema_name 'chyf2', table_name 'eflowpath_properties_vw');
+
+GRANT SELECT ON TABLE public.chyf_flowpath_properties TO PUBLIC;
+
+CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_names(
+    name_id uuid NULL,
+    name_en character varying NULL COLLATE pg_catalog."default",
+    name_fr character varying NULL COLLATE pg_catalog."default",
+    geodbname character varying NULL COLLATE pg_catalog."default",
+    geodb_id character varying NULL COLLATE pg_catalog."default"
+)
+    SERVER chyf_server
+    OPTIONS (schema_name 'chyf2', table_name 'names');
+
+GRANT SELECT ON TABLE public.chyf_names TO PUBLIC;
+"""
+
+with appconfig.connectdb() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+
+print (f"""Database schema {appconfig.dataSchema} created and ready for data """)

@@ -30,11 +30,12 @@ import shapely.geometry
 from math import floor
 import json
 import psycopg2.extras
+from psycopg2.extras import RealDictCursor
 
 iniSection = appconfig.args.args[0]
-watershed_id = appconfig.config[iniSection]['watershed_id']
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbTargetTable = appconfig.config['PROCESSING']['stream_table']
+sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
 
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['3dgeometry_field']
 demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
@@ -54,47 +55,42 @@ class DEMFile:
         self.ycnt = ycnt
         self.srid = srid
         self.nodata = nodata
-        
 
+def getWatershedIds(conn):
+    
+    publicSchema = "public"
+    aoi = "chyf_aoi"
+    aoiTable = publicSchema + "." + aoi
+
+    aois = str(sheds)[1:-1].upper()
+
+    query = f"""
+    SELECT id::varchar FROM {aoiTable} WHERE short_name IN ({aois});
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+    ids = tuple([row['id'] for row in rows])
+
+    return ids
+        
 def prepareOutput(conn):
     
     #see comment below - st_force3d with custom z value
     #is only supported in newer postgis so I wrote my own
     #for now but this could be replaced if newer postgis used
-    force3dfunction = f"""{appconfig.dataSchema}.st_force3d"""
+    
+    # force3dfunction = f"""{appconfig.dataSchema}.st_force3d"""
     
     query = f"""
-   
-    --this function exists on newer 3.x+ version of PostGIS and can be
-    --removed if using newer version
-    create function {force3dfunction}(p1 geometry, p2 int) RETURNS geometry AS
-    $$
-    DECLARE
-     pnt geometry;
-     pntz geometry;
-     pnts geometry[];
-     i int;
-     cnt int;
-    BEGIN
-        cnt := st_numpoints(p1);
-        for i IN 1..cnt loop
-            pnt = st_pointn(p1, i);
-            pntz = st_makepoint(st_x(pnt), st_y(pnt), p2);
-            pnts[i] = pntz;
-        end loop;
-        
-        RETURN st_setsrid(st_makeline(pnts), st_srid(p1));
-    END;
-    $$
-    LANGUAGE plpgsql;
     
     ALTER TABLE {dbTargetSchema}.{dbTargetTable} 
     ADD COLUMN IF NOT EXISTS {dbTargetGeom} geometry(LineStringZ, {appconfig.dataSrid});
 
     UPDATE {dbTargetSchema}.{dbTargetTable} 
-    SET {dbTargetGeom} = {force3dfunction}({appconfig.dbGeomField}, {appconfig.NODATA}); 
+    SET {dbTargetGeom} = St_Force3D({appconfig.dbGeomField}, {appconfig.NODATA}); 
     
-    DROP FUNCTION {force3dfunction}(geometry, int);
     """
     
     with conn.cursor() as cursor:
@@ -107,7 +103,7 @@ def indexDem():
     #get bounds
     #build index of 
     print("indexing dem files")
-    demfiles = [];
+    demfiles = []
     for demfile in os.listdir(demDir):
         if (demfile.endswith('.tif') or demfile.endswith('.tiff')):
             demfiles.append(getFileDetails(os.path.join(demDir,demfile)))
@@ -139,9 +135,11 @@ def getFileDetails(demfile):
     
     nodata = metadata['bands'][0]['noDataValue']
 
-    return DEMFile(demfile, xmin, ymin, xmax,ymax, xsize, ysize, xcnt, ycnt, srid, nodata)    
+    # print(f'xmin: {xmin}\n ymin:{ymin}\n xmax:{xmax}\n ymax:{ymax}\n xsize:{xsize}\n ysize:{ysize}\n xcnt:{xcnt}\n ycnt:{ycnt}\n srid:{srid}\n nodata:{nodata}')
 
-def processArea(demfile, connection, onlymissing = False):
+    return DEMFile(demfile, xmin, ymin, xmax,ymax, xsize, ysize, xcnt, ycnt, srid, nodata)
+
+def processArea(demfile, connection, watershed_id, onlymissing = False):
     print("    processing: " + (demfile.filename))
     
     #get edges
@@ -178,7 +176,7 @@ def processArea(demfile, connection, onlymissing = False):
             )
             SELECT t.{appconfig.dbIdField} as id, st_transform(t.{dbTargetGeom}, {demfile.srid}) as geometry
             FROM {dbTargetSchema}.{dbTargetTable} t, env
-            WHERE t.{dbTargetGeom} && env.bbox AND t.{appconfig.dbWatershedIdField} = '{watershed_id}'
+            WHERE t.{dbTargetGeom} && env.bbox AND t.{appconfig.dbWatershedIdField} IN {watershed_id}
             AND t.{appconfig.dbIdField} in (select id from ids);
         """
     else:
@@ -195,9 +193,9 @@ def processArea(demfile, connection, onlymissing = False):
             )
             SELECT t.{appconfig.dbIdField} as id, st_transform(t.{dbTargetGeom}, {demfile.srid}) as geometry
             FROM {dbTargetSchema}.{dbTargetTable} t, env
-            WHERE t.{dbTargetGeom} && env.bbox AND t.{appconfig.dbWatershedIdField} = '{watershed_id}'
+            WHERE t.{dbTargetGeom} && env.bbox AND t.{appconfig.dbWatershedIdField} IN {watershed_id}
         """
-    #print(query)
+    # print(query)
 
     newvalues = [] 
     
@@ -229,7 +227,7 @@ def processArea(demfile, connection, onlymissing = False):
     """
     
     with connection.cursor() as cursor2:
-        psycopg2.extras.execute_batch(cursor2, updatequery, newvalues);
+        psycopg2.extras.execute_batch(cursor2, updatequery, newvalues)
             
     connection.commit()
     
@@ -344,13 +342,15 @@ def main():
     with appconfig.connectdb() as conn:
         
         prepareOutput(conn)
+        
+        watershed_id = getWatershedIds(conn)
     
         demfiles = indexDem()
         
         #process each dem file
         print("Computing Elevations")
         for demfile in demfiles:
-            processArea(demfile, conn)
+            processArea(demfile, conn, watershed_id)
     
         #search for any missing coordinates that may require 
         #multiple dem files to compute
@@ -358,7 +358,7 @@ def main():
         if (len(demfiles) > 1):
             print ("  computing overlap areas")
             for demfile in demfiles:
-                processArea(demfile, conn, True)
+                processArea(demfile, conn, watershed_id, True)
 
     print("done")
 

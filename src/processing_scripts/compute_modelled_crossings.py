@@ -88,7 +88,7 @@ def createTable(connection):
                 transport_feature_name varchar,
               
                 crossing_status varchar,
-                crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'TRAIL')),
+                crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'RAIL', 'TRAIL')),
                 crossing_type varchar,
                 crossing_subtype varchar,
                 
@@ -128,7 +128,7 @@ def createTable(connection):
                 transport_feature_name varchar,
                 
                 crossing_status varchar,
-                crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'TRAIL')),
+                crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'RAIL', 'TRAIL')),
                 crossing_type varchar,
                 crossing_subtype varchar,
                 
@@ -160,6 +160,11 @@ def computeCrossings(connection):
         
     query = f"""
         --roads
+        ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN IF NOT EXISTS id uuid;
+        UPDATE {appconfig.dataSchema}.{roadTable} SET id = gen_random_uuid();
+        ALTER TABLE {appconfig.dataSchema}.{roadTable} DROP CONSTRAINT IF EXISTS road_pkey;
+        ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD PRIMARY KEY (id);
+
         INSERT INTO {dbTargetSchema}.{dbModelledCrossingsTable} 
             (stream_name, strahler_order, stream_id, transport_feature_name, crossing_feature_type, geometry) 
         
@@ -167,10 +172,11 @@ def computeCrossings(connection):
             with intersections as (       
                 select st_intersection(a.geometry, b.geometry) as geometry,
                     a.id as stream_id, b.id as feature_id, 
-                    a.stream_name, a.strahler_order, b."name" as transport_feature_name
+                    a.stream_name, a.strahler_order, b.street as transport_feature_name
                 from {dbTargetSchema}.{dbTargetStreamTable}  a,
                      {appconfig.dataSchema}.{roadTable} b
                 where st_intersects(a.geometry, b.geometry)
+                and b.roadc_desc NOT IN ('Abandoned Rail Road', 'Active Rail Road', 'Ferry Connector', 'Trail')
             ),
             points as(
                 select st_geometryn(geometry, generate_series(1, st_numgeometries(geometry))) as pnt, * 
@@ -180,6 +186,27 @@ def computeCrossings(connection):
             from points
         );
         
+        --rail
+        INSERT INTO {dbTargetSchema}.{dbModelledCrossingsTable} 
+            (stream_name, strahler_order, stream_id, transport_feature_name, crossing_feature_type, geometry) 
+        
+        (       
+            with intersections as (       
+                select st_intersection(a.geometry, b.geometry) as geometry,
+                    a.id as stream_id, b.id as feature_id, 
+                    a.stream_name, a.strahler_order, b.street as transport_feature_name
+                from {dbTargetSchema}.{dbTargetStreamTable}  a,
+                     {appconfig.dataSchema}.{roadTable} b
+                where st_intersects(a.geometry, b.geometry)
+                and b.roadc_desc IN ('Abandoned Rail Road', 'Active Rail Road')
+            ),
+            points as(
+                select st_geometryn(geometry, generate_series(1, st_numgeometries(geometry))) as pnt, * 
+                from intersections
+            )
+            select stream_name, strahler_order, stream_id, transport_feature_name, 'RAIL', pnt 
+            from points
+        );
         
         --trail
         INSERT INTO {dbTargetSchema}.{dbModelledCrossingsTable} 
@@ -189,10 +216,11 @@ def computeCrossings(connection):
             with intersections as (       
                 select st_intersection(a.geometry, b.geometry) as geometry,
                     a.id as stream_id, b.id as feature_id, 
-                    a.stream_name, a.strahler_order, b."name" as transport_feature_name
+                    a.stream_name, a.strahler_order, b.street as transport_feature_name
                 from {dbTargetSchema}.{dbTargetStreamTable}  a,
-                     {appconfig.dataSchema}.{trailTable} b
+                     {appconfig.dataSchema}.{roadTable} b
                 where st_intersects(a.geometry, b.geometry)
+                and b.roadc_desc = 'Trail'
             ),
             points as(
                 select st_geometryn(geometry, generate_series(1, st_numgeometries(geometry))) as pnt, * 
@@ -201,7 +229,17 @@ def computeCrossings(connection):
             select stream_name, strahler_order, stream_id, transport_feature_name, 'TRAIL', pnt 
             from points
         );
-        
+
+        --get bridge and tunnel subtypes
+        --buffer by a small distance to ensure intersection
+        UPDATE {dbTargetSchema}.{dbModelledCrossingsTable} a SET crossing_type = 'obs', crossing_subtype = 'bridge'
+        FROM {appconfig.dataSchema}.{roadTable} b
+        WHERE st_intersects(st_buffer(a.geometry, 0.001), b.geometry) AND b.feat_desc ILIKE '%bridge%';
+
+        UPDATE {dbTargetSchema}.{dbModelledCrossingsTable} a SET crossing_subtype = 'tunnel'
+        FROM {appconfig.dataSchema}.{roadTable} b
+        WHERE st_intersects(st_buffer(a.geometry, 0.001), b.geometry) AND b.feat_desc ILIKE '%tunnel%';
+
         --delete any duplicate points within a very narrow tolerance
         --duplicate points may result from transport features being broken on streams
         DELETE FROM {dbTargetSchema}.{dbModelledCrossingsTable} p1
@@ -262,6 +300,9 @@ def computeAttributes(connection):
             
         query = f"""
             UPDATE {dbTargetSchema}.{dbModelledCrossingsTable}
+            SET {colname} = 1 WHERE crossing_subtype = 'bridge';
+
+            UPDATE {dbTargetSchema}.{dbModelledCrossingsTable}
             SET {colname} = 0 WHERE {colname} IS NULL;
         """
 
@@ -316,8 +357,6 @@ def main():
         conn.autocommit = False
         
         print("Computing Modelled Crossings")
-
-        tableExists(conn)
 
         result = tableExists(conn)
 
