@@ -31,7 +31,7 @@
 import appconfig
 import shapely.wkb
 from collections import deque
-import uuid;
+import uuid
 import psycopg2.extras
 
 iniSection = appconfig.args.args[0]
@@ -64,8 +64,6 @@ class Node:
     def addOutEdge(self, edge):
         self.outedges.append(edge)
     
-   
-    
 class Edge:
     def __init__(self, fromnode, tonode, fid, length, sname, ls):
         self.fromNode = fromnode
@@ -80,6 +78,7 @@ class Edge:
         self.downstreammeasure = 0
         
 def createNetwork(connection):
+
     query = f"""
         SELECT a.{appconfig.dbIdField} as id, st_length(a.{appconfig.dbGeomField}) as length, 
           a.stream_name, a.{appconfig.dbGeomField}
@@ -91,7 +90,6 @@ def createNetwork(connection):
         cursor.execute(query)
         features = cursor.fetchall()
         
-        
         for feature in features:
             fid = feature[0]
             length = feature[1]
@@ -99,8 +97,8 @@ def createNetwork(connection):
             if (sname == "UNNAMED"):
                 sname = None
                 
-            geom = shapely.wkb.loads(feature[3] , hex=True)
-            
+            geom = shapely.wkb.loads(feature[3], hex=True)
+
             startc = geom.coords[0]
             endc = geom.coords[len(geom.coords)-1]
             
@@ -128,9 +126,8 @@ def createNetwork(connection):
             toNode.addInEdge(edge)            
 
 def processNodes():
-    
-    
-    #walk down network        
+
+    #walk down network   
     toprocess = deque()
     for edge in edges:
         edge.visited = False
@@ -147,8 +144,8 @@ def processNodes():
         maxValue = 0 
         for inedge in node.inedges:
             if not inedge.visited:
-                allvisited = False;
-                break;
+                allvisited = False
+                break
             else:
                 length = inedge.fromNode.uplength + inedge.length
                 if (length > maxValue):
@@ -203,11 +200,9 @@ def processNodes():
             
             if (inedge.sname != None and (sname != None and inedge.sname != sname)):
                 if (inedge.fromNode.uplength > longestnamed):
-                    longestnamed = inedge.fromNode.uplength;
-                    longestnamedNode = inedge.fromNode;
+                    longestnamed = inedge.fromNode.uplength
+                    longestnamedNode = inedge.fromNode
                     
-        
-        
         upnode = None
         if (namedNode != None):
             upnode = namedNode
@@ -219,11 +214,11 @@ def processNodes():
         for inedge in node.inedges:
             if (inedge.fromNode == upnode):
                 inedge.mainstemid = node.mainstemid
-                inedge.fromNode.downstreammeasure = node.downstreammeasure + inedge.length;
-                inedge.downstreammeasure = node.downstreammeasure;
+                inedge.fromNode.downstreammeasure = node.downstreammeasure + inedge.length
+                inedge.downstreammeasure = node.downstreammeasure
             else:
                 inedge.mainstemid = uuid.uuid4()
-                inedge.downstreammeasure = 0;
+                inedge.downstreammeasure = 0
                 inedge.fromNode.downstreammeasure = inedge.length
 
             inedge.fromNode.mainstemid = inedge.mainstemid
@@ -247,7 +242,7 @@ def writeResults(connection):
         newdata.append( (edge.mainstemid, downmeasurekm, upmeasurekm, edge.fid) )
     
     with connection.cursor() as cursor:    
-        psycopg2.extras.execute_batch(cursor, updatequery, newdata);
+        psycopg2.extras.execute_batch(cursor, updatequery, newdata)
             
     connection.commit()
 
@@ -281,6 +276,7 @@ def main():
         """
         with conn.cursor() as cursor:
             cursor.execute(query)
+            conn.commit()
         
         print("  creating network")
         createNetwork(conn)

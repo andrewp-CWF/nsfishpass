@@ -127,15 +127,15 @@ def createNetwork(connection, code):
     query = f"""
         select 'up', a.id, b.id
         from {dbTargetSchema}.{dbBarrierTable} a, {dbTargetSchema}.{dbTargetStreamTable} b
-        where b.geometry && st_buffer(a.snapped_point, 0.01)
-            and st_distance(st_startpoint(b.geometry), a.snapped_point) < 0.01
+        where st_dwithin(b.geometry, a.snapped_point, 0.01)
+            and st_dwithin(st_startpoint(b.geometry), a.snapped_point, 0.01)
             and a.passability_status_{code} != 1
         union 
         select 'down', a.id, b.id 
         from {dbTargetSchema}.{dbBarrierTable} a, {dbTargetSchema}.{dbTargetStreamTable} b
-        where b.geometry && st_buffer(a.snapped_point, 0.01)
-            and st_distance(st_endpoint(b.geometry), a.snapped_point) < 0.01
-            and a.passability_status_{code} != 1     
+        where st_dwithin(b.geometry, a.snapped_point, 0.01)
+            and st_dwithin(st_endpoint(b.geometry), a.snapped_point, 0.01)
+            and a.passability_status_{code} != 1
     """
    
     #load geometries and create a network
@@ -160,15 +160,15 @@ def createNetwork(connection, code):
     query = f"""
         select 'up', a.id, b.id 
         from {dbTargetSchema}.{dbGradientBarrierTable} a, {dbTargetSchema}.{dbTargetStreamTable} b
-        where b.geometry && st_buffer(a.point, 0.01)
-            and st_distance(st_startpoint(b.geometry), a.point) < 0.01
+        where st_dwithin(b.geometry, a.point, 0.01)
+            and st_dwithin(st_startpoint(b.geometry), a.point, 0.01)
             and a.type = 'gradient_barrier'
             and a.passability_status_{code} != 1 
         union 
         select 'down', a.id, b.id 
         from {dbTargetSchema}.{dbGradientBarrierTable} a, {dbTargetSchema}.{dbTargetStreamTable} b
-        where b.geometry && st_buffer(a.point, 0.01)
-            and st_distance(st_endpoint(b.geometry), a.point) < 0.01
+        where st_dwithin(b.geometry, a.point, 0.01)
+            and st_dwithin(st_endpoint(b.geometry), a.point, 0.01)
             and a.type = 'gradient_barrier'
             and a.passability_status_{code} != 1
     """

@@ -21,7 +21,7 @@
 #
 import subprocess
 import appconfig
-import os
+from psycopg2.extras import RealDictCursor
 
 streamTable = appconfig.config['DATABASE']['stream_table']
 roadTable = appconfig.config['CREATE_LOAD_SCRIPT']['road_table']
@@ -32,207 +32,106 @@ file = appconfig.config['CREATE_LOAD_SCRIPT']['raw_data']
 watershedfile = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_data']
 temptable = appconfig.dataSchema + ".temp"
 
-with appconfig.connectdb() as conn:
+sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
 
-    print("Loading Watershed Boundaries")
-    layer = "PEIWatersheds"
+def loadWatersheds():
+
+    print("Loading watershed boundaries")
+    layer = "cmm_watersheds"
     datatable = appconfig.dataSchema + "." + watershedTable
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
+    
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
-    #print(pycmd)
     subprocess.run(pycmd)
-    
-    print("Loading Streams")
-    layer = "stream"
-    datatable = appconfig.dataSchema + "." + streamTable
-    orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
-    pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nln "' + temptable + '" -lco GEOMETRY_NAME=geometry "' + file + '" ' + layer
-    print(pycmd)
-    subprocess.run(pycmd)
+
+
+def loadStreams(conn):
+
+    print("Loading stream data")
+
+    publicSchema = "public"
+
+    flowpath = "chyf_flowpath"
+    flowpathProperties = "chyf_flowpath_properties"
+    flowpathNames = "chyf_names"
+    aoi = "chyf_aoi"
+
+    flowpathTable = publicSchema + "." + flowpath
+    flowpathPropertiesTable = publicSchema + "." + flowpathProperties
+    flowpathNamesTable = publicSchema + "." + flowpathNames
+    aoiTable = publicSchema + "." + aoi
+
+    aois = str(sheds)[1:-1].upper()
+
+    query = f"""
+    SELECT id::varchar FROM {aoiTable} WHERE short_name IN ({aois});
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+    aoiTuple = tuple([row['id'] for row in rows])
     
     query = f"""
-    TRUNCATE TABLE {datatable};
-
-    INSERT INTO {datatable} (
-        id,
-        stream_name,
-        strahler_order,
-        ef_type,
-        ef_subtype,
-        rank,
-        length,
-        aoi_id,
-        from_nexus_id,
-        to_nexus_id,
-        ecatchment_id,
-        graph_id,
-        mainstem_id,
-        max_uplength,
-        hack_order,
-        horton_order,
-        shreve_order,
-        objectid,
-        enabled,
-        hydroid,
-        hydrocode,
-        reachcode,
-        name,
-        lengthkm,
-        lengthdown,
-        flowdir,
-        ftype,
-        edgetype,
-        shape_leng,
-        primary_,
-        secondary,
-        tertiary,
-        label,
-        source,
-        picture,
-        field_date,
-        stream_sou,
-        comment,
-        flipped,
-        from_node,
-        to_node,
-        nextdownid,
-        fromelev,
-        toelev,
-        geometry)
-
-    SELECT 
-        id::uuid,
-        name,
-        strahler_order,
-        ef_type,
-        ef_subtype,
-        rank,
-        length,
-        aoi_id,
-        from_nexus_id::uuid,
-        to_nexus_id::uuid,
-        ecatchment_id::uuid,
-        graph_id,
-        mainstem_id::uuid,
-        max_uplength,
-        hack_order,
-        horton_order,
-        shreve_order,
-        objectid,
-        enabled,
-        hydroid,
-        hydrocode,
-        reachcode,
-        name,
-        lengthkm,
-        lengthdown,
-        flowdir,
-        ftype,
-        edgetype,
-        shape_leng,
-        primary_,
-        secondary,
-        tertiary,
-        label,
-        source,
-        picture,
-        field_date,
-        stream_sou,
-        comment,
-        flipped,
-        from_node,
-        to_node,
-        nextdownid,
-        fromelev,
-        toelev,
-        st_geometryn(geometry,1) 
-    FROM
-    {temptable};
+    DROP TABLE IF EXISTS {appconfig.dataSchema}.{streamTable};
+    DROP TABLE IF EXISTS {appconfig.dataSchema}.{flowpathProperties};
     
-    DROP table {temptable};
+    CREATE TABLE {appconfig.dataSchema}.{streamTable} as SELECT * FROM {flowpathTable} WHERE aoi_id IN {aoiTuple} AND ef_type != 2 AND rank = 1;
+    CREATE TABLE {appconfig.dataSchema}.{flowpathProperties} as SELECT * FROM {flowpathPropertiesTable} WHERE aoi_id IN {aoiTuple};
+
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} ALTER COLUMN geometry TYPE geometry(LineString, {appconfig.dataSrid}) USING ST_Transform(geometry, {appconfig.dataSrid});
+    
+    CREATE INDEX {appconfig.dataSchema}_{streamTable}_geometry on {appconfig.dataSchema}.{streamTable} using gist(geometry); 
+    CREATE INDEX {appconfig.dataSchema}_{streamTable}_id on {appconfig.dataSchema}.{streamTable} (id);
+    CREATE INDEX {appconfig.dataSchema}_{flowpathProperties}_id on {appconfig.dataSchema}.{flowpathProperties} (id);
+
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} ADD PRIMARY KEY (id);
+    
+    ANALYZE {appconfig.dataSchema}.{flowpathProperties};
+    ANALYZE {appconfig.dataSchema}.{streamTable};
     """
-    
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
 
-    print("Loading Roads")
-    layer = "road"
+    query = f"""
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} ADD COLUMN rivername1 varchar;
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} ADD COLUMN rivername2 varchar;
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} ADD COLUMN strahler_order integer;
+
+    UPDATE {appconfig.dataSchema}.{streamTable} SET rivername1 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid1 IS NOT NULL AND rivernameid1 = a.name_id;
+    UPDATE {appconfig.dataSchema}.{streamTable} SET rivername2 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid2 IS NOT NULL AND rivernameid2 = a.name_id;
+    UPDATE {appconfig.dataSchema}.{streamTable} b SET strahler_order = a.strahler_order FROM {appconfig.dataSchema}.{flowpathProperties} a WHERE b.id = a.id;
+    """
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
+
+
+def loadRoads(conn):
+    
+    print("Loading road data")
+
+    layer = "nsrn"
     datatable = appconfig.dataSchema + "." + roadTable
-    wshedtable = appconfig.dataSchema + "." + watershedTable
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
-    pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt CONVERT_TO_LINEAR  -nln "' + temptable + '" -lco GEOMETRY_NAME=geometry "' + file + '" ' + layer
-    #print(pycmd)
+    
+    pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt CONVERT_TO_LINEAR  -nln "' + datatable + '" -lco GEOMETRY_NAME=geometry -lco FID=fid "' + file + '" ' + layer
     subprocess.run(pycmd)
+
+ 
+def main():
+
+    # -- MAIN SCRIPT --  
+
+    print("Connecting to database")
+
+    conn = appconfig.connectdb()
+    loadWatersheds()
+    loadStreams(conn)
+    loadRoads(conn)
     
-    query = f"""
-    TRUNCATE TABLE {datatable};
+    print("Loading NS dataset complete")
 
-    INSERT INTO {datatable}(
-        id,
-        name,
-        geometry)       
-    SELECT
-        gen_random_uuid(),
-        t1.name,
-        CASE
-            WHEN ST_WITHIN(t1.geometry,t2.geometry)
-            THEN t1.geometry
-            ELSE ST_Intersection(t1.geometry, t2.geometry)
-            END AS geometry 
-    FROM
-    {temptable} t1
-    JOIN {wshedtable} t2 ON ST_Intersects(t1.geometry, t2.geometry);
-
-    UPDATE {datatable} SET name = NULL WHERE name = 'Placemark';
-    UPDATE {datatable} SET name = NULL WHERE length(trim(name)) = 0;
-    UPDATE {datatable} SET name = trim(name);
-    
-    DROP table {temptable};
-    """
-    
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-    conn.commit()
-    
-    print("Loading Trails")
-    layer = "trail"
-    datatable = appconfig.dataSchema + "." + trailTable
-    wshedtable = appconfig.dataSchema + "." + watershedTable
-    orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
-    pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + temptable + '" -nlt CONVERT_TO_LINEAR -nlt PROMOTE_TO_MULTI -lco GEOMETRY_NAME=geometry "' + file + '" ' + layer
-    #print(pycmd)
-    subprocess.run(pycmd)
-    query = f"""
-    TRUNCATE TABLE {datatable};
-
-    INSERT INTO {datatable} (
-        id,
-        name,
-        status,
-        zone,
-        geometry
-    ) 
-    SELECT
-        gen_random_uuid(),
-        t1.name,
-        status,
-        zone,
-        CASE
-            WHEN ST_WITHIN(t1.geometry,t2.geometry)
-            THEN t1.geometry
-            ELSE ST_Intersection(t1.geometry, t2.geometry)
-            END AS geometry
-    FROM
-    {temptable} t1
-    JOIN {wshedtable} t2 ON ST_Intersects(t1.geometry, t2.geometry);
-
-    DROP table {temptable};
-
-    """
-    
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-    conn.commit()
-
-print("Loading PEI dataset complete")
+if __name__ == "__main__":
+    main()

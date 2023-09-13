@@ -20,13 +20,15 @@
 # This script creates the fish_species table containing accessibility and 
 # habitat parameters for species of interest from a CSV specified by the user
 #
+# TO DO: fix problem with this script where it's the only one that doesn't
+# rely on the watershed being specified - this seems to be a problem
 
 import appconfig
 import subprocess
-import sys
 
 dataFile = appconfig.config['DATABASE']['fish_parameters']
 sourceTable = appconfig.dataSchema + ".fish_species_raw"
+fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
 
 def main():
     with appconfig.connectdb() as conn:
@@ -41,14 +43,14 @@ def main():
         # load data using ogr
         orgDb = "dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost +"' port='"+ appconfig.dbPort + "' user='" + appconfig.dbUser + "' password='" + appconfig.dbPassword + "'"
         pycmd = '"' + appconfig.ogr + '" -f "PostgreSQL" PG:"' + orgDb + '" "' + dataFile + '"' + ' -nln "' + sourceTable + '" -oo AUTODETECT_TYPE=YES -oo EMPTY_STRING_AS_NULL=YES'
-        print(pycmd)
+        # print(pycmd)
         subprocess.run(pycmd)
         print("CSV loaded to table: " + sourceTable)
 
         query = f"""
-            DROP TABLE IF EXISTS {appconfig.dataSchema}.{appconfig.fishSpeciesTable};
+            DROP TABLE IF EXISTS {appconfig.dataSchema}.{fishSpeciesTable};
 
-            CREATE TABLE {appconfig.dataSchema}.{appconfig.fishSpeciesTable}(
+            CREATE TABLE {appconfig.dataSchema}.{fishSpeciesTable}(
                 code varchar(4) PRIMARY KEY,
                 name varchar,
                 
@@ -75,7 +77,7 @@ def main():
         conn.commit()
 
         query = f"""
-            INSERT INTO {appconfig.dataSchema}.{appconfig.fishSpeciesTable}(
+            INSERT INTO {appconfig.dataSchema}.{fishSpeciesTable}(
                 code,
                 name,
 
@@ -125,7 +127,7 @@ def main():
             cursor.execute(query)
         conn.commit()
 
-    print (f"""Species parameters loaded to {appconfig.dataSchema}.{appconfig.fishSpeciesTable}""")
+    print (f"""Species parameters loaded to {appconfig.dataSchema}.{fishSpeciesTable}""")
 
 if __name__ == "__main__":
     main()

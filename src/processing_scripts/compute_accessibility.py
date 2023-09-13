@@ -66,22 +66,22 @@ def computeAccessibility(connection):
             with connection.cursor() as cursor2:
                 cursor2.execute(query)
             
-            # process any updates to accessibility
-            query = f"""
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
-                SET {code}_accessibility = 
-                CASE
-                WHEN b.{code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND barrier_down_{code}_cnt = 0 THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
-                WHEN b.{code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND barrier_down_{code}_cnt > 0 THEN '{appconfig.Accessibility.POTENTIAL.value}'
-                WHEN b.{code}_accessibility = '{appconfig.Accessibility.NOT.value}' THEN '{appconfig.Accessibility.NOT.value}'
-                ELSE a.{code}_accessibility END
-                FROM {updateTable} b
-                WHERE b.stream_id = a.id AND b.{code}_accessibility IS NOT NULL AND b.update_type = 'access';
-            """
-            with connection.cursor() as cursor2:
-                cursor2.execute(query)
+            # # process any updates to accessibility
+            # query = f"""
+            # UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
+            #     SET {code}_accessibility = 
+            #     CASE
+            #     WHEN b.{code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND barrier_down_{code}_cnt = 0 THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
+            #     WHEN b.{code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND barrier_down_{code}_cnt > 0 THEN '{appconfig.Accessibility.POTENTIAL.value}'
+            #     WHEN b.{code}_accessibility = '{appconfig.Accessibility.NOT.value}' THEN '{appconfig.Accessibility.NOT.value}'
+            #     ELSE a.{code}_accessibility END
+            #     FROM {updateTable} b
+            #     WHERE b.stream_id = a.id AND b.{code}_accessibility IS NOT NULL AND b.update_type = 'access';
+            # """
+            # with connection.cursor() as cursor2:
+            #     cursor2.execute(query)
             
-            connection.commit()
+            # connection.commit()
 
 def main():        
     #--- main program ---
