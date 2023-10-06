@@ -50,7 +50,7 @@ workingWatershedId = appconfig.config[iniSection]['watershed_id']
 
 print ("Processing: " + workingWatershedId)
 
-# load_parameters.main()
+load_parameters.main()
 preprocess_watershed.main()
 load_and_snap_barriers_cabd.main()
 # load_and_snap_fishobservation.main()

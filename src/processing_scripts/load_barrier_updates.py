@@ -36,8 +36,6 @@ dataSchema = appconfig.config['DATABASE']['data_schema']
 
 dbTempTable = 'barrier_updates_' + dbWatershedId
 dbTargetTable = appconfig.config['BARRIER_PROCESSING']['barrier_updates_table']
-dbModelledCrossingsTable = appconfig.config['CROSSINGS']['modelled_crossings_table']
-dbCrossingsTable = appconfig.config['CROSSINGS']['crossings_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']

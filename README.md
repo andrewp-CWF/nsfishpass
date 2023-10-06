@@ -1,11 +1,11 @@
-# cwf-pei
-Store scripts related to habitat modelling in Prince Edward Island.
+# cwf-ns
+Store scripts related to habitat modelling in Nova Scotia.
 
 # Overview
 
-This project contains a set of scripts to create and maintain an aquatic connectivity / fish passage database for Prince Edward Island to:
-* Track known barriers to fish passage (e.g., dams, beaver activity, and stream crossings)
-* Model potential barriers to fish passage (stream gradient, road/rail stream crossings)
+This project contains a set of scripts to create and maintain an aquatic connectivity / fish passage database for Nova Scotia to:
+* Track known barriers to fish passage (e.g., dams and stream crossings)
+* Model potential barriers to fish passage (stream gradient, road/rail/trail stream crossings)
 * Model passability/accessibility of streams based on barriers and species swimming ability
 * Model streams with potential for spawning and rearing activity (for select species)
 * Prioritize assessment and remediation of barriers based on modelled accessibility and habitat potential
@@ -25,7 +25,6 @@ http://www.apache.org/licenses/LICENSE-2.0
     
     
 * GDAL/OGR (comes installed with QGIS or can install standalone)
-
 
 * PostgreSQL/PostGIS database
 
@@ -49,17 +48,17 @@ Data Processing takes part in three steps: load raw data, process each watershed
 
 ## 1 - Loading Raw Data
 
-The first step is to populate the database with the required data. These load scripts are specific to the data provided for PEI. Different source data will require modifications to these scripts.
+The first step is to populate the database with the required data. These load scripts are specific to the data provided for Nova Scotia. Different source data will require modifications to these scripts.
 
 **Scripts**
-* load_data/create_db.py -> this script creates all the necessary database tables
-* load_data/load_data.py -> this script uses OGR to load data for PEI road, trail, and stream networks from a gdb file into the PostgreSQL database.
+* load_data/create_db.py -> this script creates all the necessary database tables. A database must already exist for these tables to be created in.
+* load_data/load_data.py -> this script uses OGR to load data for Nova Scotia road, trail, and stream networks from a gdb file into the PostgreSQL database.
 
 **Running the Scripts**  
-* create_db.py -c config.ini -user [username] -password [password]   
-* load_data.py -c config.ini -user [username] -password [password]
+* create_db.py -c config.ini  
+* load_data.py -c config.ini
 
-**Main Script**
+You will be prompted to enter a username and password to access the nsfishpass database.
 
 ## 2 - Watershed Processing
 
@@ -86,31 +85,31 @@ Currently processing includes:
 
 **Main Script**
 
-process_watershed.py -c config.ini [watershedid] -user [username] -password [password]
+****All existing data in the output schema and tables will be deleted when you run this full script.**
 
-The watershedid field must be specified as a section header in the config.ini file. The section must describe the watershed processing details for example:
+process_watershed.py -c config.ini [watershedid]
 
-[01cd000]  
-#PEI: 01cd000  
-watershed_id = 01cd000  
-nhn_watershed_id = 01cd000  
-output_schema = ws01cd000  
-fish_observation_data = C:\\temp\\pei_model_testing\\habitat.gpkg  
-assessment_data = C:\\temp\\pei_model_testing\\assessment_data.gpkg  
-beaver_data = C:\\temp\\pei_model_testing\\beaver_activity.gpkg  
-watershed_table = watershed_boundaries  
+The watershedid field must be specified as a section header in the config.ini file. The section must describe the watershed processing details. For example:
+
+[cmm]    
+#NS: cmm    
+watershed_id = ["01dd000","01de000","01df000"]    
+nhn_watershed_id = ["01dd000","01de000","01df000"]    
+output_schema = cmm    
+fish_observation_data = C:\\temp\\ns_model_testing\\fish_observations.gpkg     
+habitat_access_updates = C:\\temp\\ns_model_testing\\habitat_access_updates.gpkg      
+barrier_updates = C:\\temp\\ns_model_testing\\barrier_updates.gpkg          
+watershed_table = cmm_watersheds
 
 **Input Requirements**
 
-* Directory of tif images representing DEM files. All files should have the same projection and resolution. The scripts assume this data is in an equal length projection so the st_length2d(geometry) function returns the length in metres. 
-* A raw streams table with id (uuid), name (varchar), strahler order (integer), watershed_id (varchar), and geometry (linestring) fields.
+* Directory of tif images representing DEM files. All files should have the same projection and resolution. The scripts assume this data is in an equal length projection so the st_length2d(geometry) function returns the length in metres. This should be specified in the config file under [ELEVATION_PROCESSING] as the dem_directory variable.
+
+* A raw streams table with id (uuid), name (varchar), strahler order (integer), watershed_id (varchar), and geometry (linestring) fields. This should be loaded into the database with the correct format if you have run load_data.py.
 
 **Output**
 
 * A new schema with a streams table, barrier, modelled crossings and other output tables.  
-
-**ALL EXISTING DATA IN THE OUTPUT TABLES WILL BE DELETED**
-
 
 ## 3 - Compute Summary Statistics
 
@@ -122,7 +121,7 @@ watershed_data_schemas=ws01cd000,ws02cd000
 
 **Main Script**
 
-compute_watershed_stats.py -c config.ini -user [username] -password [password]
+compute_watershed_stats.py -c config.ini
 
 **Input Requirements**
 
@@ -148,7 +147,7 @@ Note: Currently there is no velocity or channel confinement data. These paramete
 
 **Script**  
 
-load_parameters.py [dataFile] -c config.ini -user [username] -password [password]
+load_parameters.py [dataFile] -c config.ini
 
 ---
 #### 1 - Preprocessing
@@ -157,7 +156,7 @@ This script creates required database schemas and loads stream data for the wate
 
 **Script**
 
-preprocess_watershed.py -c config.ini [watershedid] -user [username] -password [password]
+preprocess_watershed.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -172,11 +171,12 @@ preprocess_watershed.py -c config.ini [watershedid] -user [username] -password [
 ---
 #### 2 - Loading Barriers
 This script loads dam barriers from the CABD API where use_analysis = true.  
-By default, the script uses the nhn_watershed_id from config.ini for the subject watershed(s) to retrieve features from the API.
+
+By default, the script uses the nhn_watershed_id from config.ini for the subject watershed(s) to retrieve features from the API. You can have multiple nhn_watershed_ids specified in the config file as long as they are formatted as a list, e.g., ["01dd000","01de000","01df000"].
 
 **Script**
 
-load_and_snap_barriers_cabd.py -c config.ini [watershedid] -user [username] -password [password]
+load_and_snap_barriers_cabd.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -191,11 +191,11 @@ load_and_snap_barriers_cabd.py -c config.ini [watershedid] -user [username] -pas
 ---
 #### 3 - Load and snap fish observation data
 
-Loads fish observation or habitat data provided and snaps it to the stream network. 
+Loads fish observation or habitat data provided and snaps it to the stream network. This data can be used by later scripts to override accessibility or habitat calculations. For instance, you can mark a stream segment as accessible because fish have been observed there, even if the accessibility model would have marked that segment as inaccessible.
 
 **Script**
 
-load_and_snap_fishobservations.py -c config.ini [watershedid] -user [username] -password [password]
+load_and_snap_fishobservations.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -209,34 +209,34 @@ load_and_snap_fishobservations.py -c config.ini [watershedid] -user [username] -
 
 ---
 #### 4 - Compute Modelled Crossings
-This script computes modelled crossings defined as locations where roads or trails cross stream networks (based on feature geometries). Due to precision and accuracy of the input datasets, not all crossings may not actually exist on the ground.   
+This script computes modelled crossings defined as locations where roads, railways, or trails cross stream networks (based on feature geometries). Due to precision and accuracy of the input datasets, not all crossings may not actually exist on the ground.   
 
-The modelled_id field for modelled crossings is a stable id. The second and all subsequent runs of compute_modelled_crossings.py will create an archive table of previous modelled crossings, and assign the modelled_id for newly generated crossings to their previous values, based on a distance threshold of 10 m. If the modelled crossings table is ever dropped (without an archive created) - modelled_ids will be regenerated.
+The modelled_id field for modelled crossings is a stable id. The second and all subsequent runs of compute_modelled_crossings.py will create an archive table of previous modelled crossings, and assign the modelled_id for newly generated crossings to their previous values, based on a distance threshold of 10 m. If the modelled crossings table is ever dropped (without an archive created), then modelled_ids will be regenerated.    
 
+The matchArchive function can be modified to keep other attributes stable as well, but most other attributes on crossings should be retrieved from assessment records and other comments in the barrier_updates table, which is loaded and mapped in a later script.
 
 **Script**
 
-compute_modelled_crossings.py -c config.ini [watershedid] -user [username] -password [password]
+compute_modelled_crossings.py -c config.ini [watershedid]
 
 **Input Requirements**
 
 * Streams table populated from the preprocessing step
-* Road and trail data loaded from the load_data script
+* Road, railway, and trail data loaded from the load_data script
 
 **Output**
 
-* A new modelled crossings table with a reference to the stream edge the crossing crosses.
+* A new modelled crossings table with a reference to the stream edge the crossing crosses and information from the intersecting transportation network.
+* Modelled crossings are added to the barriers table.
 
 
 ---
-#### 5 - Load Assessment Data
-This script loads assessment data for the watershed, joins it with modelled crossings based on the join_distance parameter in config.ini, loads the joined crossings to a crossings table, then loads these crossings to the barriers table.
-
-For PEI, passability of some modelled crossings and dams are assigned manually during this script.
+#### 5 - Load Barrier Updates
+This script loads barrier updates for the watershed, joins it with modelled crossings based on the join_distance parameter in config.ini, loads the joined crossings to a crossings table, then loads these crossings to the barriers table.
 
 **Script**
 
-load_assessment_data.py -c config.ini [watershedid] -user [username] -password [password]
+load_barrier_updates.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -246,9 +246,8 @@ load_assessment_data.py -c config.ini [watershedid] -user [username] -password [
 
 **Output**
 
-* A new assessed crossings table which contains the assessment data for the watershed
-* A new crossings table which contains all assessed crossings and modelled crossings
-* Updated barriers table that now includes all assessed and modelled stream crossings
+* A new barrier updates table which contains all barrier updates for the watershed
+* Updated barriers table that now includes information from the barrier updates table
  
 ---
 #### 6 - Mainstems
@@ -257,7 +256,7 @@ This script computes mainstems based on names of streams and longest upstream le
 
 **Script**
 
-compute_mainstems.py -c config.ini [watershedid] -user [username] -password [password]
+compute_mainstems.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -275,11 +274,11 @@ This script drapes a stream network over provided DEMs and computes a rawz value
 
 **Script**
 
-assign_raw_z.py -c config.ini [watershedid] -user [username] -password [password]
+assign_raw_z.py -c config.ini [watershedid]
 
 **Input Requirements**
 
-* Directory of tif images representing DEM files. All files should have the same projection and resolution.
+* Directory of tif images representing DEM files. All files should have the same projection and resolution. The scripts assume this data is in an equal length projection so the st_length2d(geometry) function returns the length in metres. This should be specified in the config file under [ELEVATION_PROCESSING] as the dem_directory variable.    
 * Streams table populated from the preprocessing step
 
 **Output**
@@ -293,7 +292,7 @@ This script takes a set of stream edges with raw z values and smoothes them so t
 
 **Script**
 
-smooth_z.py -c config.ini [watershedid] -user [username] -password [password]
+smooth_z.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -310,7 +309,7 @@ For every stream vertex, this script takes the elevation at that point and the e
 
 **Script**
 
-compute_vertex_gradient.py -c config.ini [watershedid] -user [username] -password [password]
+compute_vertex_gradient.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -330,7 +329,7 @@ A list of gradient barriers can be found in the output break_points table (type 
 
 **Script**
 
-break_streams_at_barriers.py -c config.ini [watershedid] -user [username] -password [password]
+break_streams_at_barriers.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -349,7 +348,7 @@ Recompute z values again based on the raw data so any added vertices are compute
 
 **Script**
 
-assign_raw_z.py -c config.ini [watershedid] -user [username] -password [password]
+assign_raw_z.py -c config.ini [watershedid]
 
 ---
 #### 12 - ReCompute Smoothed Z Value
@@ -357,7 +356,7 @@ Recompute smoothed z values again based on the raw data so any added vertices ar
 
 **Script**
 
-smooth_z.py -c config.ini [watershedid] -user [username] -password [password]
+smooth_z.py -c config.ini [watershedid]
 
 ---
 #### 13 - Compute Segment Gradient
@@ -366,7 +365,7 @@ Compute a segment gradient based on the smoothed elevation for the most upstream
 
 **Script**
 
-compute_segment_gradient.py -c config.ini [watershedid] -user [username] -password [password]
+compute_segment_gradient.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -384,9 +383,14 @@ This script computes a number of statistics for each stream segment:
 * the identifiers of the upstream and downstream barriers
 * number of upstream and downstream gradient barriers
 
+Barriers include:
+* CABD barriers (dams) where passability status != 1 (i.e., passable)
+* Stream crossings where passability status = 1 (i.e., passable)
+* Beaver activity where passability status = 1 (i.e., passable)
+
 **Script**
 
-compute_updown_barriers_fish.py -c config.ini [watershedid] -user [username] -password [password]
+compute_updown_barriers_fish.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -409,14 +413,9 @@ Segments are classified as:
 * POTENTIALLY ACCESSIBLE - when there are no gradient barriers downstream but there are impassable barriers downstream
 * NOT ACCESSIBLE - when there are gradient barriers downstream
 
-Barriers include:
-* CABD loaded barriers (dams) where passability status != 'PASSABLE'
-* Stream crossings where passability status != 'PASSABLE'
-* Beaver activity where passability status != 'PASSABLE'
-
 **Script**
 
-compute_accessibility.py -c config.ini [watershedid] -user [username] -password [password]
+compute_accessibility.py -c config.ini [watershedid]
 
 **Input Requirements**
 
@@ -432,26 +431,11 @@ compute_accessibility.py -c config.ini [watershedid] -user [username] -password 
 
 Computes a true/false value for habitat for each species for each stream segment.
 
-Habitat models are currently specific to each species:  
-
-Atlantic salmon  
-* stream segment_gradient <= 0.03 --> true
-* salmon redd observations present on stream segment --> true
-* stream enhancement work has not been completed on the stream --> false  
-* else --> false
-
-American eel  
-* stream strahler order >= 2 --> true
-* else --> false
-
-Smelt/Gaspereau  
-* accessibility of stream segment is 'accessible' or 'potentially accessible' --> true
-* accessibility is defined for this species by the presence of gradient barriers
-* else --> false
+Habitat models are currently just based on accessibility - any stream segments that are 'ACCESSIBLE' or 'POTENTIALLY ACCESSIBLE' have been classified as habitat. These models can be refined when there are additional habitat parameters or supplementary habitat data available for the species of interest.
 
 **Script**
 
-assign_habitat.py -c config.ini [watershedid] -user [username] -password [password]
+assign_habitat.py -c config.ini [watershedid]
 
 
 **Input Requirements**
@@ -473,11 +457,11 @@ Statistics by species:
 * total upstream habitat for each species
 * functional upstream habitat for each species
 
-Functional upstream habitat is calculated by walking up the stream network, summing up length of stream segments with habitat model = true, stopping at the first barrier encountered (upstream).
+Functional upstream habitat is calculated by walking up the stream network, summing up length of stream segments where the habitat model = true, stopping at the first barrier encountered (upstream).
 
  **Script**
 
-compute_barriers_upstream_values.py -c config.ini [watershedid] -user [username] -password [password]
+compute_barriers_upstream_values.py -c config.ini [watershedid]
 
 **Input Requirements**
 * stream network
@@ -486,6 +470,25 @@ compute_barriers_upstream_values.py -c config.ini [watershedid] -user [username]
 **Output**
 * addition of statistic fields to the barriers table
 
+---
+#### 18 - Compute barrier DCI
+
+Computes the Dendritic Connectivity Index (DCI) value for each barrier and each species.    
+
+The overall DCI value for each species of interest (i.e., the DCI assuming all barriers remain the same passability) is calculated by discounting (or weighting) the length of each stream segment that contains habitat based on the cumulative passability of all downstream barriers. These discounted lengths are then divided by the total length of habitat for that species in the watershed to produce the DCI value.  
+
+For each species, the DCI for each barrier is then calculated as the effect that barrier would have on the overall DCI value if the barrier was removed. To do this, the barrier's passability value is set to 1 (passable), the overall species DCI is calculated again, and the difference between the two DCI values is set as the DCI for that barrier.
+
+ **Script**
+
+compute_barrier_dci.py -c config.ini [watershedid]
+
+**Input Requirements**
+* stream network
+* barriers
+
+**Output**
+* addition of statistic fields to the barriers table
 
 
 # Algorithms 
@@ -596,10 +599,10 @@ host = database host
 port = database post  
 name = database name
 
-data_schema = name of main schema for holding raw stream data  
-stream_table = names of streams table  
-fish_parameters = name of fish species table  
-working_srid = the srid of the stream data - these scripts use the function st_length to compute stream length so the raw data should be in a meters based projection (or reprojected before used)  
+data_schema = name of main schema for holding raw stream data    
+stream_table = names of streams table    
+fish_parameters = name of fish species table    
+working_srid = the srid of the stream data. These scripts use the function st_length to compute stream length so the raw data should be in a meters based projection (or reprojected before used). 
 
 [CABD_DATABASE]  
 buffer = this is the buffer distance to grab features - the units are in the working_srid so if its meters 200 is reasonable, if it's degrees something like 0.001 is reasonable  
@@ -616,21 +619,19 @@ watershed_table = name of the layer containing watershed boundaries
 stream_table = stream table name 
 
 [WATERSHEDID 1] -> there will be one section for each watershed with a unique section name  
-watershed_id = watershed id to process  
-nhn_watershed_id = nhn watershed id to process  
+watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
+nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data  
-assessment_data = spatial file containing assessment data  
-beaver_data = spatial file containing beaver activity data  
+fish_observation_data = zip file containing fish observation data    
+habitat_access_updates = spatial file containing updates to habitat or accessibility      
 watershed_table = table containing watershed boundaries
 
 [WATERSHEDID 2] -> there will be one section for each watershed with a unique section name  
-watershed_id = watershed id to process  
-nhn_watershed_id = nhn watershed id to process  
+watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
+nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data  
-assessment_data = spatial file containing assessment data  
-beaver_data = spatial file containing beaver activity data  
+fish_observation_data = zip file containing fish observation data    
+habitat_access_updates = spatial file containing updates to habitat or accessibility    
 watershed_table = table containing watershed boundaries
   
 [ELEVATION_PROCESSING]  
@@ -650,17 +651,15 @@ max_downstream_gradient_field = name of field for storing the maximum downstream
   
 [BARRIER_PROCESSING]  
 barrier_table = table for storing barriers
-gradient_barrier_table = table where gradient barriers are stored (type = gradient_barrier)
+gradient_barrier_table = table where gradient barriers are stored (type = gradient_barrier)    
+barrier_updates = spatial file containing updates to barriers
   
 [CROSSINGS]  
-modelled_crossings_table = table for storing modelled crossings
-assessed_crossings_table = table for storing assessed crossings
-crossings_table = table for storing all stream crossings (both modelled and assessed)
-
+modelled_crossings_table = table for storing modelled crossings    
 join_distance = distance (in working srid units) for joining assessment data with modelled crossings
 
 
 [HABITAT_STATS]  
-stats_table = this table will be created in the [DATABASE].data_schema schema and contain watershed statistics
+stats_table = name of the table to be created in the [DATABASE].data_schema schema which will contain watershed statistics
 
 watershed_data_schemas = the list of processing schemas to include in the stats table; the schemas must exist and data must be fully processed
