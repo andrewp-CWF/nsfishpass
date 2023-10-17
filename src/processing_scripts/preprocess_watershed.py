@@ -102,6 +102,9 @@ def main():
             
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {appconfig.streamTableChannelConfinementField} = floor(random() * 100);
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {appconfig.streamTableDischargeField} = floor(random() * 100);
+
+            ALTER SCHEMA {dbTargetSchema} OWNER TO analyst;
+            ALTER TABLE  {dbTargetSchema}.{dbTargetStreamTable} OWNER TO analyst;
        
         """
         

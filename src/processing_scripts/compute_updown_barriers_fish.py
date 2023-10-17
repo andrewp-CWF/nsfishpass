@@ -39,16 +39,16 @@ snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 edges = []
 nodes = dict()
 
-with appconfig.connectdb() as conn:
+# with appconfig.connectdb() as conn:
 
-    query = f"""
-    SELECT code, name
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
+#     query = f"""
+#     SELECT code, name
+#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
+#     """
 
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        specCodes = cursor.fetchall()
+#     with conn.cursor() as cursor:
+#         cursor.execute(query)
+#         specCodes = cursor.fetchall()
 
 class Node:
     
@@ -311,11 +311,24 @@ def main():
     
     with appconfig.connectdb() as conn:
 
+        conn.autocommit = False
+
+        query = f"""
+        SELECT code, name
+        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        """
+
+        global specCodes
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            specCodes = cursor.fetchall()
+
         for species in specCodes:
             code = species[0]
             name = species[1]
         
-            conn.autocommit = False
+            
 
             edges.clear()
             nodes.clear()

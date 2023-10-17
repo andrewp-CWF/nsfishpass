@@ -31,7 +31,7 @@ import appconfig
 iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbWatershedId = appconfig.config[iniSection]['watershed_id']
-rawData = appconfig.config[iniSection]['barrier_updates']
+# rawData = appconfig.config[iniSection]['barrier_updates']
 dataSchema = appconfig.config['DATABASE']['data_schema']
 
 dbTempTable = 'barrier_updates_' + dbWatershedId
@@ -42,16 +42,16 @@ watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
 joinDistance = appconfig.config['CROSSINGS']['join_distance']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
-with appconfig.connectdb() as conn:
+# with appconfig.connectdb() as conn:
 
-    query = f"""
-    SELECT code
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
+#     query = f"""
+#     SELECT code
+#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
+#     """
 
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        specCodes = cursor.fetchall()
+#     with conn.cursor() as cursor:
+#         cursor.execute(query)
+#         specCodes = cursor.fetchall()
 
 def loadBarrierUpdates(connection):
         
@@ -267,6 +267,17 @@ def processUpdates(connection):
 def main():
         
     with appconfig.connectdb() as conn:
+
+        query = f"""
+        SELECT code
+        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        """
+
+        global specCodes
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            specCodes = cursor.fetchall()
         
         conn.autocommit = False
 

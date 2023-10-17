@@ -39,16 +39,16 @@ trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
-with appconfig.connectdb() as conn:
+# with appconfig.connectdb() as conn:
 
-    query = f"""
-    SELECT code
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
+#     query = f"""
+#     SELECT code
+#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
+#     """
 
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        specCodes = cursor.fetchall()
+#     with conn.cursor() as cursor:
+#         cursor.execute(query)
+#         specCodes = cursor.fetchall()
 
 def tableExists(connection):
 
@@ -96,6 +96,9 @@ def createTable(connection):
                 
                 primary key (modelled_id)
             );
+
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable}_archive OWNER TO analyst;
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO analyst;
             
         """
     
@@ -136,6 +139,8 @@ def createTable(connection):
                 
                 primary key (modelled_id)
             );
+
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO analyst;
             
         """
     
@@ -353,10 +358,21 @@ def loadToBarriers(connection):
 def main():                        
     #--- main program ---    
     with appconfig.connectdb() as conn:
-        
+
         conn.autocommit = False
         
         print("Computing Modelled Crossings")
+
+        query = f"""
+        SELECT code
+        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        """
+
+        global specCodes
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            specCodes = cursor.fetchall()
 
         result = tableExists(conn)
 
