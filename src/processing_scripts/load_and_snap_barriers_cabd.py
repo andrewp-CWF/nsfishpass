@@ -92,6 +92,8 @@ def main():
 
                 primary key (id)
             );
+
+            ALTER TABLE {dbTargetSchema}.{dbBarrierTable} OWNER TO analyst;
             
         """
         with conn.cursor() as cursor:

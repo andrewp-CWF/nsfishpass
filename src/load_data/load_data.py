@@ -89,6 +89,9 @@ def loadStreams(conn):
     
     ANALYZE {appconfig.dataSchema}.{flowpathProperties};
     ANALYZE {appconfig.dataSchema}.{streamTable};
+
+    ALTER TABLE  {appconfig.dataSchema}.{streamTable} OWNER TO analyst;
+    ALTER TABLE  {appconfig.dataSchema}.{flowpathProperties} OWNER TO analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)

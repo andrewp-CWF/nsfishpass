@@ -453,6 +453,8 @@ def writeResults(connection):
             stream_id uuid
             {tablestr}
         );
+
+        ALTER TABLE {dbTargetSchema}.temp OWNER TO analyst;
     """
     with connection.cursor() as cursor:
         cursor.execute(query)
