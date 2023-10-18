@@ -375,7 +375,7 @@ def main():
                 {dci_query}
             """
             
-            print(query)
+            #print(query)
             with connection.cursor() as cursor:
                 cursor.execute(query)
     
