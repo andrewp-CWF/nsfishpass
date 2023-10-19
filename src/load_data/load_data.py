@@ -34,7 +34,7 @@ temptable = appconfig.dataSchema + ".temp"
 
 sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
 
-def loadWatersheds():
+def loadWatersheds(conn):
 
     print("Loading watershed boundaries")
     layer = "cmm_watersheds"
@@ -43,6 +43,14 @@ def loadWatersheds():
     
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
     subprocess.run(pycmd)
+
+    query = f"""
+    ALTER TABLE {appconfig.dataSchema}.{watershedTable} OWNER TO analyst;
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
 
 
 def loadStreams(conn):
@@ -90,8 +98,8 @@ def loadStreams(conn):
     ANALYZE {appconfig.dataSchema}.{flowpathProperties};
     ANALYZE {appconfig.dataSchema}.{streamTable};
 
-    ALTER TABLE  {appconfig.dataSchema}.{streamTable} OWNER TO analyst;
-    ALTER TABLE  {appconfig.dataSchema}.{flowpathProperties} OWNER TO analyst;
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO analyst;
+    ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
@@ -122,7 +130,14 @@ def loadRoads(conn):
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt CONVERT_TO_LINEAR  -nln "' + datatable + '" -lco GEOMETRY_NAME=geometry -lco FID=fid "' + file + '" ' + layer
     subprocess.run(pycmd)
 
- 
+    query = f"""
+    ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO analyst;
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
+
 def main():
 
     # -- MAIN SCRIPT --  
@@ -130,7 +145,7 @@ def main():
     print("Connecting to database")
 
     conn = appconfig.connectdb()
-    loadWatersheds()
+    loadWatersheds(conn)
     loadStreams(conn)
     loadRoads(conn)
     
