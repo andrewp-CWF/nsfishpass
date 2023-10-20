@@ -50,6 +50,8 @@ def main():
 
             primary key (watershed_id)
         );
+
+        ALTER TABLE  {appconfig.dataSchema}.{statTable} OWNER TO analyst;
     """
     with appconfig.connectdb() as connection:
         with connection.cursor() as cursor:
@@ -373,7 +375,7 @@ def main():
                 {dci_query}
             """
             
-            # print(query)
+            #print(query)
             with connection.cursor() as cursor:
                 cursor.execute(query)
     

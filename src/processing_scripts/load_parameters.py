@@ -71,6 +71,8 @@ def main():
                 rear_channel_confinement_min numeric,
                 rear_channel_confinement_max numeric
                 );
+
+                ALTER TABLE  {appconfig.dataSchema}.{fishSpeciesTable} OWNER TO analyst;
             """
         with conn.cursor() as cursor:
             cursor.execute(query)

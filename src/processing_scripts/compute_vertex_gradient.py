@@ -107,6 +107,8 @@ def computeVertexGradients(connection):
         
         alter table {dbTargetSchema}.{dbTargetStreamTable} 
         drop column {db4dGeomField};
+
+        ALTER TABLE  {dbTargetSchema}.{dbVertexTable} OWNER TO analyst;
     """
     
     # print(query)

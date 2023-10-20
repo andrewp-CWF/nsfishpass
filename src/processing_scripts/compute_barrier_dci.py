@@ -196,6 +196,8 @@ def writeResults(conn, newAllBarrierData, species):
             barrier_id uuid
             {tablestr}
         );
+
+        ALTER TABLE  {dbTargetSchema}.temp OWNER TO analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)

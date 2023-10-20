@@ -37,16 +37,16 @@ dbVertexTable = appconfig.config['GRADIENT_PROCESSING']['vertex_gradient_table']
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['smoothedgeometry_field']
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 
-with appconfig.connectdb() as conn:
+# with appconfig.connectdb() as conn:
 
-    query = f"""
-    SELECT code
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
+#     query = f"""
+#     SELECT code
+#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
+#     """
 
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        specCodes = cursor.fetchall()
+#     with conn.cursor() as cursor:
+#         cursor.execute(query)
+#         specCodes = cursor.fetchall()
 
 def breakstreams (conn):
         
@@ -78,6 +78,8 @@ def breakstreams (conn):
         INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type, {colStringSimple}) 
             SELECT snapped_point, id, type, {colStringSimple}
             FROM {dbTargetSchema}.{dbBarrierTable};
+
+        ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO analyst;
     """
         
     # print(query)
@@ -311,6 +313,17 @@ def updateBarrier(connection):
                         
 def main():
     with appconfig.connectdb() as connection:
+        query = f"""
+        SELECT code
+        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        """
+
+        global specCodes
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            specCodes = cursor.fetchall()
+
         print("    breaking streams at barrier points")
         breakstreams(connection)
         
