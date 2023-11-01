@@ -27,7 +27,11 @@ dbTargetSchema = appconfig.config[iniSection]['output_schema']
 
 workingWatershedId = ast.literal_eval(appconfig.config[iniSection]['watershed_id'])
 workingWatershedId = [x.upper() for x in workingWatershedId]
-workingWatershedId = tuple(workingWatershedId)
+
+if len(workingWatershedId) == 1:
+    workingWatershedId = f"('{workingWatershedId[0]}')"
+else:
+    workingWatershedId = tuple(workingWatershedId)
 
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
@@ -52,7 +56,10 @@ def main():
         for x in ids:
             aoi_ids.append(x[0])
 
-        aoi_ids = tuple(aoi_ids)
+        if len(aoi_ids) == 1:
+            aoi_ids = f"('{aoi_ids[0]}')"
+        else:
+            aoi_ids = tuple(aoi_ids)
         
         query = f"""
             CREATE SCHEMA IF NOT EXISTS {dbTargetSchema};
@@ -80,8 +87,8 @@ def main():
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
                 ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, 
                 stream_name, strahler_order, geometry)
-            SELECT gen_random_uuid(), id, aoi_id,
-                rivername1, strahler_order,
+            SELECT gen_random_uuid(), t1.id, t1.aoi_id,
+                t1.rivername1, t1.strahler_order,
                 (ST_Dump((ST_Intersection(t1.geometry, t2.geometry)))).geom
             FROM {appconfig.dataSchema}.{appconfig.streamTable} t1
             JOIN {appconfig.dataSchema}.{appconfig.watershedTable} t2 ON ST_Intersects(t1.geometry, t2.geometry)

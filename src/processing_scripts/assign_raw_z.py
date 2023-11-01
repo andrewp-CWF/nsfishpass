@@ -31,11 +31,18 @@ from math import floor
 import json
 import psycopg2.extras
 from psycopg2.extras import RealDictCursor
+import ast
 
 iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbTargetTable = appconfig.config['PROCESSING']['stream_table']
-sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
+workingWatershedId = ast.literal_eval(appconfig.config[iniSection]['watershed_id'])
+workingWatershedId = [x.upper() for x in workingWatershedId]
+
+if len(workingWatershedId) == 1:
+    workingWatershedId = f"('{workingWatershedId[0]}')"
+else:
+    workingWatershedId = tuple(workingWatershedId)
 
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['3dgeometry_field']
 demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
@@ -62,16 +69,22 @@ def getWatershedIds(conn):
     aoi = "chyf_aoi"
     aoiTable = publicSchema + "." + aoi
 
-    aois = str(sheds)[1:-1].upper()
+    aois = workingWatershedId
+
+    # aois = str(sheds)[1:-1].upper()
 
     query = f"""
-    SELECT id::varchar FROM {aoiTable} WHERE short_name IN ({aois});
+    SELECT id::varchar FROM {aoiTable} WHERE short_name IN {aois};
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute(query)
         rows = cursor.fetchall()
 
-    ids = tuple([row['id'] for row in rows])
+    if len(rows) == 1:
+        ids = [row['id'] for row in rows]
+        ids = f"('{ids[0]}')"
+    else:
+        ids = tuple([row['id'] for row in rows])
 
     return ids
         
