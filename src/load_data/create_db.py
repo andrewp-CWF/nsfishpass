@@ -137,11 +137,11 @@ query = f"""
     );
     create index {railTable}_geom_idx on {appconfig.dataSchema}.{railTable} using gist(geometry);
 
-    ALTER SCHEMA {appconfig.dataSchema} OWNER TO analyst;
-    ALTER TABLE {appconfig.dataSchema}.{appconfig.streamTable} OWNER TO analyst;
-    ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO analyst;
-    ALTER TABLE {appconfig.dataSchema}.{trailTable} OWNER TO analyst;
-    ALTER TABLE {appconfig.dataSchema}.{railTable} OWNER TO analyst;
+    ALTER SCHEMA {appconfig.dataSchema} OWNER TO cwf_analyst;
+    ALTER TABLE {appconfig.dataSchema}.{appconfig.streamTable} OWNER TO cwf_analyst;
+    ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
+    ALTER TABLE {appconfig.dataSchema}.{trailTable} OWNER TO cwf_analyst;
+    ALTER TABLE {appconfig.dataSchema}.{railTable} OWNER TO cwf_analyst;
 
     
 """
