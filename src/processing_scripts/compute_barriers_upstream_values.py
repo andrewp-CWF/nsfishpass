@@ -454,7 +454,7 @@ def writeResults(connection):
             {tablestr}
         );
 
-        ALTER TABLE {dbTargetSchema}.temp OWNER TO analyst;
+        ALTER TABLE {dbTargetSchema}.temp OWNER TO cwf_analyst;
     """
     with connection.cursor() as cursor:
         cursor.execute(query)

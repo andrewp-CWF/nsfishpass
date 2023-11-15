@@ -197,7 +197,7 @@ def writeResults(conn, newAllBarrierData, species):
             {tablestr}
         );
 
-        ALTER TABLE  {dbTargetSchema}.temp OWNER TO analyst;
+        ALTER TABLE  {dbTargetSchema}.temp OWNER TO cwf_analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)

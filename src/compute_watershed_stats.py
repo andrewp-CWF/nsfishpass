@@ -51,7 +51,7 @@ def main():
             primary key (watershed_id)
         );
 
-        ALTER TABLE  {appconfig.dataSchema}.{statTable} OWNER TO analyst;
+        ALTER TABLE  {appconfig.dataSchema}.{statTable} OWNER TO cwf_analyst;
     """
     with appconfig.connectdb() as connection:
         with connection.cursor() as cursor:

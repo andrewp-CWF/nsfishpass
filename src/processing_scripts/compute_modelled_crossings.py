@@ -97,8 +97,8 @@ def createTable(connection):
                 primary key (modelled_id)
             );
 
-            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable}_archive OWNER TO analyst;
-            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO analyst;
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable}_archive OWNER TO cwf_analyst;
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO cwf_analyst;
             
         """
     
@@ -140,7 +140,7 @@ def createTable(connection):
                 primary key (modelled_id)
             );
 
-            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO analyst;
+            ALTER TABLE  {dbTargetSchema}.{dbModelledCrossingsTable} OWNER TO cwf_analyst;
             
         """
     

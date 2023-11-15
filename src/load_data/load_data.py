@@ -45,7 +45,7 @@ def loadWatersheds(conn):
     subprocess.run(pycmd)
 
     query = f"""
-    ALTER TABLE {appconfig.dataSchema}.{watershedTable} OWNER TO analyst;
+    ALTER TABLE {appconfig.dataSchema}.{watershedTable} OWNER TO cwf_analyst;
     """
 
     with conn.cursor() as cursor:
@@ -98,8 +98,8 @@ def loadStreams(conn):
     ANALYZE {appconfig.dataSchema}.{flowpathProperties};
     ANALYZE {appconfig.dataSchema}.{streamTable};
 
-    ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO analyst;
-    ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO analyst;
+    ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO cwf_analyst;
+    ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO cwf_analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
@@ -131,7 +131,7 @@ def loadRoads(conn):
     subprocess.run(pycmd)
 
     query = f"""
-    ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO analyst;
+    ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
     """
 
     with conn.cursor() as cursor:

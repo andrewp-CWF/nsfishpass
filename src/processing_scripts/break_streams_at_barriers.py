@@ -79,7 +79,7 @@ def breakstreams (conn):
             SELECT snapped_point, id, type, {colStringSimple}
             FROM {dbTargetSchema}.{dbBarrierTable};
 
-        ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO analyst;
+        ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO cwf_analyst;
     """
         
     # print(query)
