@@ -43,6 +43,8 @@ from processing_scripts import compute_accessibility
 from processing_scripts import assign_habitat
 from processing_scripts import compute_barriers_upstream_values
 from processing_scripts import compute_barrier_dci
+from processing_scripts import remove_isolated_flowpaths
+
 
 iniSection = appconfig.args.args[0]
 
@@ -72,6 +74,7 @@ compute_accessibility.main()
 assign_habitat.main()
 compute_barriers_upstream_values.main()
 compute_barrier_dci.main()
+remove_isolated_flowpaths.main()
 
 print ("Processing Complete: " + workingWatershedId)
 print("Runtime: " + str((datetime.now() - startTime)))
