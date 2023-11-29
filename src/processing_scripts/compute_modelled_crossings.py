@@ -104,6 +104,7 @@ def createTable(connection):
     
         with connection.cursor() as cursor:
             cursor.execute(query)
+        connection.commit()
         
         # add species-specific passability fields
         for species in specCodes:
@@ -118,6 +119,7 @@ def createTable(connection):
 
             with connection.cursor() as cursor:
                 cursor.execute(query)
+            connection.commit()
     
     else:
         query = f"""
@@ -327,11 +329,18 @@ def loadToBarriers(connection):
     colString = ','.join(newCols)
 
     query = f"""
+        DELETE 
+        FROM {dbTargetSchema}.barrier_passability bp
+        USING {dbTargetSchema}.{dbBarrierTable} b 
+        WHERE b.cabd_id = bp.barrier_id AND 
+            b.type = 'stream_crossing';
+
         DELETE FROM {dbTargetSchema}.{dbBarrierTable} WHERE type = 'stream_crossing';
+
         
         INSERT INTO {dbTargetSchema}.{dbBarrierTable}(
             modelled_id, snapped_point,
-            type, {colString},
+            type,
             stream_name, strahler_order, stream_id, 
             transport_feature_name, crossing_status,
             crossing_feature_type, crossing_type,
@@ -339,7 +348,7 @@ def loadToBarriers(connection):
         )
         SELECT 
             modelled_id, geometry,
-            'stream_crossing', {colString},
+            'stream_crossing',
             stream_name, strahler_order, stream_id, 
             transport_feature_name, crossing_status,
             crossing_feature_type, crossing_type,
@@ -354,6 +363,57 @@ def loadToBarriers(connection):
     with connection.cursor() as cursor:
         cursor.execute(query)
     connection.commit()
+
+    query = f"""
+        SELECT id 
+        FROM {dbTargetSchema}.fish_species
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+        species = cursor.fetchall()
+    connection.commit()
+
+    passability_data = []
+    
+    query = f"""
+        SELECT modelled_id, crossing_subtype
+        FROM {dbTargetSchema}.{dbModelledCrossingsTable};
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+        feature_data = cursor.fetchall()
+    connection.commit()
+
+    # Get data for passability table
+    for feature in feature_data:
+        for s in species:
+            passability_feature = []
+            passability_feature.append(feature[0])
+            passability_feature.append(s[0])
+            if feature[1] == 'bridge':
+                passability_feature.append(1)
+            else:
+                passability_feature.append(0)
+        passability_data.append(passability_feature)
+
+    insertquery = f"""
+        INSERT INTO {dbTargetSchema}.barrier_passability (
+            barrier_id
+            ,species_id
+            ,passability_status
+        )
+        VALUES(%s, %s, %s);
+    """
+
+    with connection.cursor() as cursor:
+        for feature in passability_data:
+            cursor.execute(insertquery, feature)
+    connection.commit()
+
+
+
 
 def main():                        
     #--- main program ---    

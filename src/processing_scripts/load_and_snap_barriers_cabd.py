@@ -50,6 +50,27 @@ def main():
             cursor.execute(query)
             specCodes = cursor.fetchall()
 
+        # create fish species table
+        query = f"""
+            DROP TABLE IF EXISTS {dbTargetSchema}.fish_species;
+            
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.fish_species (
+                id uuid not null default gen_random_uuid()
+                ,code varchar(32)
+                ,common_name varchar(128)
+                
+                ,primary key (id)
+            );
+
+            INSERT INTO {dbTargetSchema}.fish_species (code, common_name)
+            SELECT code, name FROM {appconfig.dataSchema}.{fishSpeciesTable};
+
+            ALTER TABLE {dbTargetSchema}.fish_species OWNER TO cwf_analyst;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+
         # creates barriers table with attributes from CABD and crossings table
         query = f"""
             DROP TABLE IF EXISTS {dbTargetSchema}.{dbBarrierTable};
@@ -64,8 +85,6 @@ def main():
                 name varchar(256),
                 type varchar(32),
                 owner varchar,
-                passability_status varchar,
-                passability_status_notes varchar,
 
                 dam_use varchar,
 
@@ -100,6 +119,24 @@ def main():
             cursor.execute(query)
         conn.commit()
 
+        # create passability table
+        query = f"""
+            DROP TABLE IF EXISTS {dbTargetSchema}.barrier_passability;
+            
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.barrier_passability (
+                barrier_id uuid
+                ,species_id uuid
+                ,passability_status varchar
+                ,passability_status_notes varchar
+            );
+
+            ALTER TABLE {dbTargetSchema}.barrier_passability OWNER TO cwf_analyst;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
         # retrieve barrier data from CABD API
         url = f"https://cabd-web.azurewebsites.net/cabd-api/features/dams?&filter=nhn_watershed_id:in:{nhnWatershedId}&filter=use_analysis:eq:true"
         response = urllib.request.urlopen(url)
@@ -116,8 +153,29 @@ def main():
             output_feature.append(feature["properties"]["dam_name_en"])
             output_feature.append(feature["properties"]["owner"])
             output_feature.append(feature["properties"]["dam_use"])
-            output_feature.append(feature["properties"]["passability_status"])
             output_data.append(output_feature)
+
+        query = f"""
+            SELECT id 
+            FROM {dbTargetSchema}.fish_species;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            species = cursor.fetchall()
+        conn.commit()
+        
+        passability_data = []
+
+        # Get data for passability table
+        for feature in feature_data:
+            for s in species:
+                passability_feature = []
+                passability_feature.append(feature["properties"]["cabd_id"])
+                passability_feature.append(s[0])
+                passability_feature.append(feature["properties"]["passability_status"])
+            passability_data.append(passability_feature)
+
 
         insertquery = f"""
             INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
@@ -126,15 +184,36 @@ def main():
                 name,
                 owner,
                 dam_use,
-                passability_status,
                 type)
-            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s, %s, %s, UPPER(%s), 'dam');
+            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s, %s, %s, 'dam');
         """
         with conn.cursor() as cursor:
             for feature in output_data:
                 cursor.execute(insertquery, feature)
         conn.commit()
                         
+        insertquery = f"""
+            INSERT INTO {dbTargetSchema}.barrier_passability (
+                barrier_id
+                ,species_id
+                ,passability_status
+                )
+            VALUES (%s, %s, UPPER(%s));
+
+            UPDATE {dbTargetSchema}.barrier_passability
+                SET passability_status = 
+                    CASE
+                    WHEN passability_status = 'BARRIER' THEN 0
+                    WHEN passability_status = 'UNKNOWN' THEN 0
+                    WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
+                    WHEN passability_status = 'PASSABLE' THEN 1
+                    ELSE NULL END;
+        """
+        with conn.cursor() as cursor:
+            for feature in passability_data:
+                cursor.execute(insertquery, feature)
+        conn.commit()
+
         # snaps barrier features to network
         query = f"""
             CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
@@ -167,37 +246,38 @@ def main():
          
         print("Loading barriers from CABD dataset complete")
 
+
         # add species-specific passability fields
-        for species in specCodes:
-            code = species[0]
+        # for species in specCodes:
+        #     code = species[0]
 
-            colname = "passability_status_" + code
+        #     colname = "passability_status_" + code
             
-            query = f"""
-                alter table {dbTargetSchema}.{dbBarrierTable} 
-                add column if not exists {colname} numeric;
+        #     query = f"""
+        #         alter table {dbTargetSchema}.{dbBarrierTable} 
+        #         add column if not exists {colname} numeric;
     
-                update {dbTargetSchema}.{dbBarrierTable}
-                set {colname} = 
-                    CASE
-                    WHEN passability_status = 'BARRIER' THEN 0
-                    WHEN passability_status = 'UNKNOWN' THEN 0
-                    WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
-                    WHEN passability_status = 'PASSABLE' THEN 1
-                    ELSE NULL END;
-            """
+        #         update {dbTargetSchema}.{dbBarrierTable}
+        #         set {colname} = 
+        #             CASE
+        #             WHEN passability_status = 'BARRIER' THEN 0
+        #             WHEN passability_status = 'UNKNOWN' THEN 0
+        #             WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
+        #             WHEN passability_status = 'PASSABLE' THEN 1
+        #             ELSE NULL END;
+        #     """
 
-            with conn.cursor() as cursor:
-                cursor.execute(query)
+        #     with conn.cursor() as cursor:
+        #         cursor.execute(query)
         
-        query = f"""
-            alter table {dbTargetSchema}.{dbBarrierTable} 
-            drop column if exists passability_status;
-        """
+        # query = f"""
+        #     alter table {dbTargetSchema}.{dbBarrierTable} 
+        #     drop column if exists passability_status;
+        # """
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        # conn.commit()
 
     print("Loading barrier data complete")
 

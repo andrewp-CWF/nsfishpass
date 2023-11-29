@@ -48,6 +48,27 @@ dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrie
 #         cursor.execute(query)
 #         specCodes = cursor.fetchall()
 
+def insertPassability(conn, passability_data):
+    """
+    Insert data into the barrier_passability table
+    """
+    if len(passability_data) == 0:
+        return
+
+    insertquery = f"""
+        INSERT INTO {dbTargetSchema}.barrier_passability (
+            barrier_id
+            ,species_id
+            ,passability_status
+        )
+        VALUES(%s, %s, %s);
+    """
+
+    with conn.cursor() as cursor:
+        for feature in passability_data:
+            cursor.execute(insertquery, feature)
+    conn.commit()
+
 def breakstreams (conn):
         
     # find all break points
@@ -75,8 +96,8 @@ def breakstreams (conn):
             );
     
         -- barriers
-        INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type, {colStringSimple}) 
-            SELECT snapped_point, id, type, {colStringSimple}
+        INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type) 
+            SELECT snapped_point, id, type
             FROM {dbTargetSchema}.{dbBarrierTable};
 
         ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO cwf_analyst;
@@ -160,7 +181,7 @@ def breakstreams (conn):
                 query = f"""INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type, passability_status_{code}) values ('{point}', gen_random_uuid(), 'gradient_barrier', 0);""" 
                 with conn.cursor() as cursor2:
                     cursor2.execute(query)
-                
+
                 # set gradient barriers to be passable for all other species
                 for species in specCodes:
                     if species[0] != code:
@@ -173,6 +194,64 @@ def breakstreams (conn):
                             cursor2.execute(query)
                     else:
                         continue
+
+                # add gradient barriers to passability table
+                query = f"""
+                    SELECT id
+                    FROM {dbTargetSchema}.{dbGradientBarrierTable}
+                """
+
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    feature_data = cursor.fetchall()
+                conn.commit()
+
+                query = f"""
+                    SELECT id
+                    FROM {dbTargetSchema}.fish_species
+                    WHERE code = '{code}'
+                """ 
+
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    species = cursor.fetchall()
+                conn.commit()
+
+                query = f"""
+                    SELECT id
+                    FROM {dbTargetSchema}.fish_species
+                    WHERE code != '{code}'
+                """
+
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    other_species = cursor.fetchall()
+                conn.commit()
+
+                passability_data = []
+                other_passability_data = [] # barriers passable for all other species
+
+                for feature in feature_data:
+                    passability_feature = []
+                    other_passability_feature = []
+                    for s in species:
+                        passability_feature.append(feature[0])
+                        passability_feature.append(s[0])
+                        passability_feature.append(0)
+                    for s in other_species:
+                        other_passability_feature.append(feature[0])
+                        other_passability_feature.append(s[0])
+                        other_passability_feature.append(1)
+                    if len(passability_feature) != 0:
+                        passability_data.append(passability_feature)
+                    if len(other_passability_feature) != 0:
+                        other_passability_data.append(other_passability_feature)
+                
+                insertPassability(conn, passability_data)
+                insertPassability(conn, other_passability_data)
+
+                
+                
                     
             lastmainstem = mainstem
             lastgradient = gradient

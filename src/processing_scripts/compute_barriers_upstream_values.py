@@ -33,6 +33,7 @@ watershed_id = appconfig.config[iniSection]['watershed_id']
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
+dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 
 edges = []
 nodes = dict()
@@ -122,6 +123,7 @@ class Edge:
         return iter([self.fid, self.length, self.downbarriers, self.downpassability, self.habitat])
 
 def createNetwork(connection):
+    # Takes longest to run, could look to improve in future
     
     query = f"""
         SELECT a.code
@@ -199,6 +201,12 @@ def createNetwork(connection):
                     query = f"""
                     SELECT passability_status_{fish} FROM {dbTargetSchema}.{dbBarrierTable} WHERE id = '{barrier}';
                     """
+                    query = f"""
+                    SELECT passability_status 
+                    FROM {dbTargetSchema}.{dbPassabilityTable} p
+                    WHERE p.barrier_id = '{barrier}'
+                    """
+
                     with connection.cursor() as cursor2:
                         cursor2.execute(query)
                         status = cursor2.fetchone()
