@@ -37,6 +37,7 @@ railTable = appconfig.config['CREATE_LOAD_SCRIPT']['rail_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
     
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
+dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
 # with appconfig.connectdb() as conn:
@@ -330,9 +331,9 @@ def loadToBarriers(connection):
 
     query = f"""
         DELETE 
-        FROM {dbTargetSchema}.barrier_passability bp
+        FROM {dbTargetSchema}.{dbPassabilityTable} bp
         USING {dbTargetSchema}.{dbBarrierTable} b 
-        WHERE b.cabd_id = bp.barrier_id AND 
+        WHERE b.id = bp.barrier_id AND 
             b.type = 'stream_crossing';
 
         DELETE FROM {dbTargetSchema}.{dbBarrierTable} WHERE type = 'stream_crossing';
@@ -377,8 +378,10 @@ def loadToBarriers(connection):
     passability_data = []
     
     query = f"""
-        SELECT modelled_id, crossing_subtype
-        FROM {dbTargetSchema}.{dbModelledCrossingsTable};
+        SELECT b.id, b.crossing_subtype
+        FROM {dbTargetSchema}.{dbBarrierTable} b
+        JOIN {dbTargetSchema}.{dbModelledCrossingsTable} c
+            ON b.modelled_id = c.modelled_id;
     """
 
     with connection.cursor() as cursor:
@@ -396,10 +399,10 @@ def loadToBarriers(connection):
                 passability_feature.append(1)
             else:
                 passability_feature.append(0)
-        passability_data.append(passability_feature)
+            passability_data.append(passability_feature)
 
     insertquery = f"""
-        INSERT INTO {dbTargetSchema}.barrier_passability (
+        INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
             barrier_id
             ,species_id
             ,passability_status

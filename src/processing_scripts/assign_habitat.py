@@ -69,7 +69,9 @@ def computeHabitatModel(connection):
                         AND 
                         {dbSegmentGradientField} >= {mingradient} 
                         AND 
-                        {dbSegmentGradientField} < {maxgradient};
+                        {dbSegmentGradientField} < {maxgradient}
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
                     
                 """
                 with connection.cursor() as cursor2:
@@ -165,7 +167,9 @@ def computeHabitatModel(connection):
                         AND 
                         {dbSegmentGradientField} >= {mingradient} 
                         AND 
-                        {dbSegmentGradientField} < {maxgradient};
+                        {dbSegmentGradientField} < {maxgradient}
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
                     
                 """
                 with connection.cursor() as cursor2:
@@ -218,7 +222,9 @@ def computeHabitatModel(connection):
 
                     UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
                         SET {colname} = true
-                        WHERE strahler_order >= 2;
+                        WHERE strahler_order >= 2
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
                     
                 """
                 with connection.cursor() as cursor2:

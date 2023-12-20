@@ -27,9 +27,12 @@ streamTable = appconfig.config['DATABASE']['stream_table']
 roadTable = appconfig.config['CREATE_LOAD_SCRIPT']['road_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
+secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+tidalZones = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zones']
 
 file = appconfig.config['CREATE_LOAD_SCRIPT']['raw_data']
 watershedfile = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_data']
+tidalZoneFile = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zone_data']
 temptable = appconfig.dataSchema + ".temp"
 
 sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
@@ -40,8 +43,62 @@ def loadWatersheds(conn):
     layer = "cmm_watersheds"
     datatable = appconfig.dataSchema + "." + watershedTable
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
-    
+
+    # query = f"""
+    # DROP TABLE IF EXISTS {appconfig.dataSchema}.{watershedTable};
+    # """
+
+    # with conn.cursor() as cursor:
+    #     cursor.execute(query)
+    # conn.commit()
+
+
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
+    subprocess.run(pycmd)
+    
+    query = f"""
+    ALTER TABLE {appconfig.dataSchema}.{watershedTable} OWNER TO cwf_analyst;
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
+
+def loadSecondaryWatersheds(conn):
+    print("Loading secondary watershed boundaries")
+    layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+
+    query = f"""
+    DROP TABLE IF EXISTS {appconfig.dataSchema}.{secondaryWatershedTable};
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
+
+    datatable = appconfig.dataSchema + "." + secondaryWatershedTable
+    orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
+
+    for layer in layers:
+        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
+        subprocess.run(pycmd)
+
+    query = f"""
+    ALTER TABLE {appconfig.dataSchema}.{secondaryWatershedTable} OWNER TO cwf_analyst;
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+    conn.commit()
+
+
+def loadTidalZones(conn):
+    print("Loading tidal zones")
+    layer = "tidal_zones"
+    datatable = appconfig.dataSchema + "." + tidalZones
+    orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
+
+    pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + tidalZoneFile + '" ' + layer
     subprocess.run(pycmd)
 
     query = f"""
@@ -78,7 +135,11 @@ def loadStreams(conn):
         cursor.execute(query)
         rows = cursor.fetchall()
 
-    aoiTuple = tuple([row['id'] for row in rows])
+
+    if len(rows) == 1:
+        aoiTuple = f"('{rows[0]['id']}')"
+    else:
+        aoiTuple = tuple([row['id'] for row in rows])
     
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{streamTable};
@@ -146,8 +207,10 @@ def main():
 
     conn = appconfig.connectdb()
     loadWatersheds(conn)
+    loadSecondaryWatersheds(conn)
+    loadTidalZones(conn)
     loadStreams(conn)
-    loadRoads(conn)
+    # loadRoads(conn)
     
     print("Loading NS dataset complete")
 

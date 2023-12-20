@@ -195,66 +195,65 @@ def breakstreams (conn):
                     else:
                         continue
 
-                # add gradient barriers to passability table
-                query = f"""
-                    SELECT id
-                    FROM {dbTargetSchema}.{dbGradientBarrierTable}
-                """
-
-                with conn.cursor() as cursor:
-                    cursor.execute(query)
-                    feature_data = cursor.fetchall()
-                conn.commit()
-
-                query = f"""
-                    SELECT id
-                    FROM {dbTargetSchema}.fish_species
-                    WHERE code = '{code}'
-                """ 
-
-                with conn.cursor() as cursor:
-                    cursor.execute(query)
-                    species = cursor.fetchall()
-                conn.commit()
-
-                query = f"""
-                    SELECT id
-                    FROM {dbTargetSchema}.fish_species
-                    WHERE code != '{code}'
-                """
-
-                with conn.cursor() as cursor:
-                    cursor.execute(query)
-                    other_species = cursor.fetchall()
-                conn.commit()
-
-                passability_data = []
-                other_passability_data = [] # barriers passable for all other species
-
-                for feature in feature_data:
-                    passability_feature = []
-                    other_passability_feature = []
-                    for s in species:
-                        passability_feature.append(feature[0])
-                        passability_feature.append(s[0])
-                        passability_feature.append(0)
-                    for s in other_species:
-                        other_passability_feature.append(feature[0])
-                        other_passability_feature.append(s[0])
-                        other_passability_feature.append(1)
-                    if len(passability_feature) != 0:
-                        passability_data.append(passability_feature)
-                    if len(other_passability_feature) != 0:
-                        other_passability_data.append(other_passability_feature)
-                
-                insertPassability(conn, passability_data)
-                insertPassability(conn, other_passability_data)
-
-                
-                
-                    
             lastmainstem = mainstem
             lastgradient = gradient
+
+        # add gradient barriers to passability table
+        query = f"""
+            SELECT id
+            FROM {dbTargetSchema}.{dbGradientBarrierTable}
+            WHERE id NOT IN (SELECT id FROM {dbTargetSchema}.{dbGradientBarrierTable})
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            feature_data = cursor.fetchall()
+        conn.commit()
+
+        query = f"""
+            SELECT id
+            FROM {dbTargetSchema}.fish_species
+            WHERE code = '{code}'
+        """ 
+        # print(query)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            species = cursor.fetchall()
+        conn.commit()
+
+        query = f"""
+            SELECT id
+            FROM {dbTargetSchema}.fish_species
+            WHERE code != '{code}'
+        """
+        # print(query)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            other_species = cursor.fetchall()
+        conn.commit()
+
+        passability_data = []
+        other_passability_data = [] # barriers passable for all other species
+
+        for feature in feature_data:
+            passability_feature = []
+            other_passability_feature = []
+            for s in species:
+                passability_feature.append(feature[0])
+                passability_feature.append(s[0])
+                passability_feature.append(0)
+            for s in other_species:
+                other_passability_feature.append(feature[0])
+                other_passability_feature.append(s[0])
+                other_passability_feature.append(1)
+            if len(passability_feature) != 0:
+                passability_data.append(passability_feature)
+            if len(other_passability_feature) != 0:
+                other_passability_data.append(other_passability_feature)
+        
+        insertPassability(conn, passability_data)
+        insertPassability(conn, other_passability_data)
+   
             
     #break streams at snapped points
     #todo: may want to ensure this doesn't create small stream segments - 
@@ -284,6 +283,7 @@ def breakstreams (conn):
         SELECT z.{appconfig.dbIdField},
                 y.source_id,
                 y.{appconfig.dbWatershedIdField},
+                y.sec_code,
                 y.stream_name,
                 y.strahler_order,
                 {appconfig.streamTableChannelConfinementField},
@@ -298,11 +298,11 @@ def breakstreams (conn):
         
               
         INSERT INTO  {dbTargetSchema}.{dbTargetStreamTable} 
-            (id, source_id, {appconfig.dbWatershedIdField}, stream_name, strahler_order, 
+            (id, source_id, {appconfig.dbWatershedIdField}, sec_code, stream_name, strahler_order, 
             segment_length,
             {appconfig.streamTableChannelConfinementField},{appconfig.streamTableDischargeField},
             mainstem_id, geometry)
-        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, 
+        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code,
             a.stream_name, a.strahler_order,
             st_length2d(a.geometry) / 1000.0, 
             a.{appconfig.streamTableChannelConfinementField},
@@ -345,6 +345,7 @@ def recomputeMainstreamMeasure(connection):
         FROM measures
         WHERE measures.id = {dbTargetSchema}.{dbTargetStreamTable}.id
     """
+    # print(query)
     #load geometries and create a network
     with connection.cursor() as cursor:
         cursor.execute(query)
