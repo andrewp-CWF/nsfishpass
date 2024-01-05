@@ -213,21 +213,41 @@ def processUpdates(connection):
         WHERE update_type = 'new feature'
         AND update_status = 'ready';
 
+        -- salmon
         INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
             barrier_id
             ,species_id
             ,passability_status
         )
         SELECT 
-            u.barrier_id
+            b.id
             , (SELECT id
                 FROM {dbTargetSchema}.fish_species
                 WHERE code = 'as')
             ,u.passability_status
-        FROM {dbTargetSchema}.{dbTargetTable} u
-        JOIN {dbTargetSchema}.{dbBarrierTable} b
+        FROM {dbTargetSchema}.{dbBarrierTable} b
+        JOIN {dbTargetSchema}.{dbTargetTable} u
             ON b.update_id = u.update_id::varchar
-        WHERE u.update_type = 'new feature';
+        WHERE u.update_type = 'new feature'
+        AND update_status = 'ready';
+
+        -- eel (data from this source does not affect eel so passability is null)
+        INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
+            barrier_id
+            ,species_id
+            ,passability_status
+        )
+        SELECT 
+            b.id
+            , (SELECT id
+                FROM {dbTargetSchema}.fish_species
+                WHERE code = 'ae')
+            ,NULL
+        FROM {dbTargetSchema}.{dbBarrierTable} b
+        JOIN {dbTargetSchema}.{dbTargetTable} u
+            ON b.update_id = u.update_id::varchar
+        WHERE u.update_type = 'new feature'
+        AND update_status = 'ready';
 
 
         UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
