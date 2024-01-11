@@ -63,6 +63,12 @@ def loadBarrierUpdates(connection):
     subprocess.run(pycmd)
 
     query = f"""
+        DROP TABLE IF EXISTS {dbTargetSchema}.{dbTargetTable}_archive;
+        CREATE TABLE {dbTargetSchema}.{dbTargetTable}_archive 
+        AS SELECT * FROM {dbTargetSchema}.{dbTargetTable};
+        ALTER TABLE  {dbTargetSchema}.{dbTargetTable}_archive OWNER TO cwf_analyst;
+
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS update_id;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey PRIMARY KEY (update_id);
@@ -84,6 +90,7 @@ def loadBarrierUpdates(connection):
 def joinBarrierUpdates(connection):
 
     query = f"""
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS barrier_id;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN barrier_id uuid;
     """
     
@@ -122,7 +129,7 @@ def joinBarrierUpdates(connection):
             )
         UPDATE {dbTargetSchema}.{dbTargetTable}
         SET barrier_id = a.id
-        FROM match AS a WHERE a.update_id = {dbTargetSchema}.{dbTargetTable}.update_id;
+        FROM match AS a WHERE a.update_id = {dbTargetSchema}.{dbTargetTable}.update_id AND {dbTargetSchema}.{dbTargetTable}.update_type != 'new feature';
         """
         with connection.cursor() as cursor:
             cursor.execute(query)
@@ -171,7 +178,7 @@ def processUpdates(connection):
                 break
 
     query = f"""
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_status varchar;
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN IF NOT EXISTS update_status varchar;
         UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'ready';
     """
     with connection.cursor() as cursor:
@@ -212,6 +219,12 @@ def processUpdates(connection):
         FROM {dbTargetSchema}.{dbTargetTable}
         WHERE update_type = 'new feature'
         AND update_status = 'ready';
+
+        -- barrier ids
+        UPDATE {dbTargetSchema}.{dbTargetTable}
+        SET barrier_id = b.id
+        FROM {dbTargetSchema}.{dbBarrierTable} b
+        WHERE b.update_id = {dbTargetSchema}.{dbTargetTable}.update_id::varchar;
 
         -- salmon
         INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
@@ -289,7 +302,7 @@ def processUpdates(connection):
             passability_status = CASE WHEN a.passability_status IS NOT NULL AND a.passability_status IS DISTINCT FROM p.passability_status THEN a.passability_status ELSE p.passability_status END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE p.barrier_id = a.barrier_id
-        AND a.update_status = 'ready'
+        AND a.update_status = 'ready';
     """
 
     processMultiple(connection)
@@ -305,6 +318,51 @@ def processUpdates(connection):
     with connection.cursor() as cursor:
         cursor.execute(removeDuplicatesQuery)
     connection.commit()
+
+def matchArchive(connection):
+
+    query = f"""
+        WITH matched AS (
+            SELECT
+            a.fid,
+            nn.barrier_id as archive_id,
+            nn.dist
+            FROM {dbTargetSchema}.{dbTargetTable} a
+            CROSS JOIN LATERAL
+            (SELECT
+            barrier_id,
+            ST_Distance(a.geometry, b.geometry) as dist
+            FROM {dbTargetSchema}.{dbTargetTable}_archive b
+            ORDER BY a.geometry <-> b.geometry
+            LIMIT 1) as nn
+            WHERE nn.dist < 10
+        )
+
+        UPDATE {dbTargetSchema}.{dbTargetTable} a
+            SET barrier_id = m.archive_id
+            FROM matched m
+            WHERE m.fid = a.fid;
+
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+
+
+def tableExists(conn):
+
+    query = f"""
+    SELECT EXISTS(SELECT 1 FROM information_schema.tables 
+    WHERE table_catalog='{appconfig.dbName}' AND 
+        table_schema='{dbTargetSchema}' AND 
+        table_name='{dbTargetTable}_archive');
+    """
+
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+        result = cursor.fetchone()
+        result = result[0]
+
+    return result
 
 #--- main program ---
 def main():
@@ -335,6 +393,11 @@ def main():
         
         print("  processing updates")
         processUpdates(conn)
+
+        result = tableExists(conn)
+        
+        if result:
+            matchArchive(conn)
         
     print("done")
     
