@@ -209,11 +209,13 @@ def processUpdates(connection):
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
             update_id, original_point, type, owner, 
+            passability_status_notes,
             stream_name, date_examined,
             transport_feature_name
             )
         SELECT 
             update_id, ST_Transform(geometry, 2961), barrier_type, ownership, 
+            notes,
             stream_name, date_examined,
             road_name
         FROM {dbTargetSchema}.{dbTargetTable}
@@ -292,7 +294,8 @@ def processUpdates(connection):
         SET
             date_examined = CASE WHEN a.date_examined IS NOT NULL THEN a.date_examined ELSE b.date_examined END,
             transport_feature_name = CASE WHEN (a.road_name IS NOT NULL AND a.road_name IS DISTINCT FROM b.transport_feature_name) THEN a.road_name ELSE b.transport_feature_name END,
-            crossing_subtype = CASE WHEN a.crossing_subtype IS NOT NULL THEN a.crossing_subtype ELSE b.crossing_subtype END
+            crossing_subtype = CASE WHEN a.crossing_subtype IS NOT NULL THEN a.crossing_subtype ELSE b.crossing_subtype END,
+            passability_status_notes = CASE WHEN a.notes IS NOT NULL THEN a.notes ELSE b.passability_status_notes END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE b.id = a.barrier_id
         AND a.update_status = 'ready';
