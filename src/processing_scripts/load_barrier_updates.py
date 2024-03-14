@@ -255,7 +255,7 @@ def processUpdates(connection):
                 FROM {dbTargetSchema}.fish_species
                 WHERE code = 'ae')
             ,CASE 
-                WHEN u.update_source = 'Saint Croix Assessments' THEN NULL
+                WHEN u.update_source = 'Saint Croix Assessments' AND u.site_id NOT LIKE 'HR_001' THEN '0'
                 ELSE u.passability_status
             END
         FROM {dbTargetSchema}.{dbBarrierTable} b
