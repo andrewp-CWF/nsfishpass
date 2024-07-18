@@ -10,7 +10,7 @@ import psycopg2 as pg2
 # ogr = "C:\\Program Files\\GDAL\\ogr2ogr.exe"
 ogr = "C:\\Program Files\\QGIS 3.22.1\\bin\\ogr2ogr.exe"
 
-dbHost = "cabd-postgres.postgres.database.azure.com"
+dbHost = "cabd-postgres-prod.postgres.database.azure.com"
 dbPort = "5432"
 dbName = "nsfishpass"
 dbUser = input(f"""Enter username to access {dbName}:\n""")
@@ -70,10 +70,10 @@ SELECT b.id
     ,b.road
     ,b.culvert_type
     ,b.culvert_condition
-    ,b.barrier_cnt_upstr_as
-    ,b.barriers_upstr_as
-    ,b.barrier_cnt_downstr_as
-    ,b.barriers_downstr_as
+    ,b.barrier_cnt_upstr_{species_code}
+    ,b.barriers_upstr_{species_code}
+    ,b.barrier_cnt_downstr_{species_code}
+    ,b.barriers_downstr_{species_code}
     ,b.total_upstr_hab_all
     ,b.func_upstr_hab_all
     ,b.dci_as
@@ -321,7 +321,6 @@ WITH ranks AS (
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
 		,rank_avg_gain_tiered
 		,rank_total_upstr_hab
---		,rank_avg_gain_per_barrier
 		,DENSE_RANK() OVER(ORDER BY rank_avg_gain_tiered + rank_total_upstr_hab, group_id ASC) as rank_composite
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
 	ORDER BY rank_composite ASC
@@ -333,20 +332,15 @@ WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = ranks.id;
 
 -- Potential and immediate with weight by downstream barriers
 ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed} 
--- ADD rank_pareto numeric,
 ADD tier_combined varchar;
--- ADD tier_pareto varchar;
 
 WITH ranks AS (
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
 		,rank_avg_gain_tiered
 		,rank_total_upstr_hab
---		,rank_avg_gain_per_barrier
 		,rank_combined
--- 		,LEAST(rank_avg_gain_tiered, rank_total_upstr_hab) as rank_pareto
 		,DENSE_RANK() OVER(ORDER BY LEAST(rank_avg_gain_tiered, rank_total_upstr_hab), group_id ASC) as rank_composite
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
--- 	ORDER BY rank_pareto ASC
 )
 UPDATE cmm.ranked_barriers_{species_code}_{watershed}
 SET tier_combined = case
@@ -355,23 +349,16 @@ SET tier_combined = case
 			when r.rank_combined <= 30 then 'C'
 			else 'D'
 		end
--- 	,rank_pareto = r.rank_pareto
--- 	,tier_pareto = case
--- 		when r.rank_pareto <= 10 then 'A'
--- 		when r.rank_pareto <= 20 then 'B'
--- 		when r.rank_pareto <= 30 then 'C'
--- 		else 'D'
--- 	end
 FROM ranks r
 WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = r.id;
 
 ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed}
-DROP COLUMN stream_id_up,
-DROP COLUMN func_upstr_hab_{species_code},
-DROP COLUMN total_upstr_hab_{species_code},
-DROP COLUMN w_func_upstr_hab_{species_code},
-DROP COLUMN rank_avg_gain_tiered,
-DROP COLUMN rank_total_upstr_hab;
+DROP COLUMN stream_id_up;
+--DROP COLUMN func_upstr_hab_{species_code},
+--DROP COLUMN total_upstr_hab_{species_code},
+--DROP COLUMN w_func_upstr_hab_{species_code},
+--DROP COLUMN rank_avg_gain_tiered,
+--DROP COLUMN rank_total_upstr_hab;
 
 """
 

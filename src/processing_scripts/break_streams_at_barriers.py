@@ -286,7 +286,7 @@ def breakstreams (conn):
     print("breaking streams")
     
     query = f"""
-        CREATE TEMPORARY TABLE newstreamlines AS
+        CREATE TABLE {dbTargetSchema}.newstreamlines AS
         
         with breakpoints as (
             SELECT a.{appconfig.dbIdField} as id, 
@@ -318,7 +318,7 @@ def breakstreams (conn):
              ON y.{appconfig.dbIdField} = z.{appconfig.dbIdField};
         
         DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} 
-        WHERE {appconfig.dbIdField} IN (SELECT {appconfig.dbIdField} FROM newstreamlines);
+        WHERE {appconfig.dbIdField} IN (SELECT {appconfig.dbIdField} FROM {dbTargetSchema}.newstreamlines);
         
               
         INSERT INTO  {dbTargetSchema}.{dbTargetStreamTable} 
@@ -337,7 +337,7 @@ def breakstreams (conn):
             a.{appconfig.streamTableChannelConfinementField},
             a.{appconfig.streamTableDischargeField}, 
             mainstem_id, a.geometry
-        FROM newstreamlines a;
+        FROM {dbTargetSchema}.newstreamlines a;
 
         UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
         DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} WHERE ST_IsEmpty(geometry);
@@ -345,7 +345,7 @@ def breakstreams (conn):
         DROP INDEX IF EXISTS {dbTargetSchema}."smooth_geom_idx";
         CREATE INDEX smooth_geom_idx ON {dbTargetSchema}.{dbTargetStreamTable} USING gist({dbTargetGeom});
         
-        DROP TABLE newstreamlines;
+        DROP TABLE {dbTargetSchema}.newstreamlines;
     
     """
         

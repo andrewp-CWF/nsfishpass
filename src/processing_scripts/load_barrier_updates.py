@@ -111,11 +111,15 @@ def joinBarrierUpdates(connection):
             SELECT
             foo.update_id,
             closest_point.id,
+            closest_point.cabd_id,
+            closest_point.modelled_id,
             closest_point.dist
             FROM {dbTargetSchema}.{dbTargetTable} AS foo
             CROSS JOIN LATERAL 
             (SELECT
-                id, 
+                id,
+                cabd_id,
+                modelled_id,
                 ST_Distance(bar.snapped_point, ST_Transform(foo.geometry, 2961)) as dist
                 FROM {dbTargetSchema}.{dbBarrierTable} AS bar
                 WHERE ST_DWithin(bar.snapped_point, ST_Transform(foo.geometry, 2961), {joinDistance})
@@ -128,7 +132,7 @@ def joinBarrierUpdates(connection):
         UPDATE {dbTargetSchema}.{dbTargetTable}
         SET barrier_id = a.id
         FROM match AS a WHERE a.update_id = {dbTargetSchema}.{dbTargetTable}.update_id 
-        AND {dbTargetSchema}.{dbTargetTable}.update_type IN ('modify feature', 'delete feature');;
+        AND {dbTargetSchema}.{dbTargetTable}.update_type IN ('modify feature', 'delete feature');
         """
         with connection.cursor() as cursor:
             cursor.execute(query)
@@ -322,7 +326,7 @@ def processUpdates(connection):
 
         UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
         SET
-            passability_status = CASE WHEN a.passability_status_as IS NOT NULL AND a.passability_status_ae IS DISTINCT FROM p.passability_status THEN a.passability_status_ae ELSE p.passability_status END
+            passability_status = CASE WHEN a.passability_status_ae IS NOT NULL AND a.passability_status_ae IS DISTINCT FROM p.passability_status THEN a.passability_status_ae ELSE p.passability_status END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE p.barrier_id = a.barrier_id
         AND a.update_status = 'ready'
@@ -360,13 +364,13 @@ def matchArchive(connection):
     query = f"""
         WITH matched AS (
             SELECT
-            a.fid,
-            nn.barrier_id as archive_id,
+            a.update_id,
+            nn.update_id as archive_id,
             nn.dist
             FROM {dbTargetSchema}.{dbTargetTable} a
             CROSS JOIN LATERAL
             (SELECT
-            barrier_id,
+            update_id,
             ST_Distance(a.geometry, b.geometry) as dist
             FROM {dbTargetSchema}.{dbTargetTable}_archive b
             ORDER BY a.geometry <-> b.geometry
@@ -375,10 +379,9 @@ def matchArchive(connection):
         )
 
         UPDATE {dbTargetSchema}.{dbTargetTable} a
-            SET barrier_id = m.archive_id::uuid
+            SET update_id = m.archive_id::uuid
             FROM matched m
-            WHERE m.fid = a.fid;
-
+            WHERE m.update_id = a.update_id;
     """
     with connection.cursor() as cursor:
         cursor.execute(query)
@@ -430,10 +433,10 @@ def main():
         print("  processing updates")
         processUpdates(conn)
 
-        result = tableExists(conn)
+        # result = tableExists(conn)
         
-        if result:
-            matchArchive(conn)
+        # if result:
+        #     matchArchive(conn)
         
     print("done")
     
