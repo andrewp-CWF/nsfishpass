@@ -308,6 +308,7 @@ def breakstreams (conn):
                 y.source_id,
                 y.{appconfig.dbWatershedIdField},
                 y.sec_code,
+                y.sec_name,
                 y.stream_name,
                 y.strahler_order,
                 {appconfig.streamTableChannelConfinementField},
@@ -322,11 +323,11 @@ def breakstreams (conn):
         
               
         INSERT INTO  {dbTargetSchema}.{dbTargetStreamTable} 
-            (id, source_id, {appconfig.dbWatershedIdField}, sec_code, stream_name, strahler_order, 
+            (id, source_id, {appconfig.dbWatershedIdField}, sec_code, sec_name, stream_name, strahler_order, 
             segment_length, w_segment_length,
             {appconfig.streamTableChannelConfinementField},{appconfig.streamTableDischargeField},
             mainstem_id, geometry)
-        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code,
+        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code, a.sec_name,
             a.stream_name, a.strahler_order,
             st_length2d(a.geometry) / 1000.0, 
             case strahler_order 

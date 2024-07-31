@@ -95,7 +95,7 @@ def main():
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
                 ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, sec_code, sec_name,
                 stream_name, strahler_order, geometry)
-            SELECT gen_random_uuid(), t1.id, t1.aoi_id,
+            SELECT DISTINCT ON (t1.id) gen_random_uuid(), t1.id, t1.aoi_id,
                 t3.SEC_CODE,
                 t1.watershed_name,
                 t1.rivername1, t1.strahler_order,
@@ -130,7 +130,7 @@ def main():
             ALTER TABLE  {dbTargetSchema}.{dbTargetStreamTable} OWNER TO cwf_analyst;
        
         """
-        
+        #print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

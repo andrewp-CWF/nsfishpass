@@ -67,7 +67,8 @@ def loadWatersheds(conn):
 def loadSecondaryWatersheds(conn):
     print("Loading secondary watershed boundaries")
     # layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix", "cmm_shore_direct_1", "cmm_shore_direct_2", "cmm_shore_direct_3"]
-    layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+    #layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+    layers = ["cmm_secondary_watersheds"]
 
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{secondaryWatershedTable};
@@ -81,7 +82,7 @@ def loadSecondaryWatersheds(conn):
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
     for layer in layers:
-        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
+        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geom -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
         subprocess.run(pycmd)
 
     query = f"""
@@ -165,6 +166,7 @@ def loadStreams(conn):
     ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO cwf_analyst;
     ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO cwf_analyst;
     """
+    # print(query)
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
