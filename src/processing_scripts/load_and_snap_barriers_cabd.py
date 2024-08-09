@@ -357,7 +357,7 @@ def main():
         joinString = ''
         conditionString = ''
         for i in range(len(specCodes)):
-            code = specCodes[i][0]
+            code = specCodes[i]
             col = f'p{i}.passability_status AS passability_status_{code}'
             cols.append(col)
             joinString = joinString + f'JOIN {dbTargetSchema}.{dbPassabilityTable} p{i} ON b.id = p{i}.barrier_id\n'
