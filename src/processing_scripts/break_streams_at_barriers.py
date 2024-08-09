@@ -108,9 +108,9 @@ def breakstreams (conn):
         -- Need to figure out why adding in this query causes the accessibility model
         -- to mark almost everything as accessible
         --habitat and accessibility updates
-        INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
-            SELECT snapped_point, id, update_type
-            FROM {dbTargetSchema}.{dbHabAccessUpdates};
+        --INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
+        --    SELECT snapped_point, id, update_type
+        --    FROM {dbTargetSchema}.{dbHabAccessUpdates};
 
         ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO cwf_analyst;
     """

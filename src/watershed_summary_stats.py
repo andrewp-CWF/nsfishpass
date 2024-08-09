@@ -25,8 +25,12 @@
 import appconfig
 import sys
 
+
+iniSection = appconfig.args.args[0]
+
 wsStreamTable = appconfig.config['PROCESSING']['stream_table']
 sheds = appconfig.config['HABITAT_STATS']['watershed_data_schemas'].split(",")
+dbTargetSchema = appconfig.config[iniSection]['output_schema']
 
 species = []
 sec_sheds = []
@@ -34,9 +38,9 @@ statTable = 'habitat_stats'
 
 def createTable():
     query = f"""
-        DROP TABLE IF EXISTS {appconfig.dataSchema}.{statTable};
+        DROP TABLE IF EXISTS {dbTargetSchema}.{statTable};
         
-        CREATE TABLE IF NOT EXISTS {appconfig.dataSchema}.{statTable}(
+        CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{statTable}(
             watershed_id varchar,
             sec_wshed_name varchar,
             total_km double precision,
@@ -53,7 +57,7 @@ def createTable():
             primary key (watershed_id, sec_wshed_name)
         );
 
-        ALTER TABLE  {appconfig.dataSchema}.{statTable} OWNER TO cwf_analyst;
+        ALTER TABLE  {dbTargetSchema}.{statTable} OWNER TO cwf_analyst;
     """
     with appconfig.connectdb() as connection:
         with connection.cursor() as cursor:
@@ -142,7 +146,7 @@ def runStats():
             if sec_shed is None: continue
             q_all_stream_data = f"SELECT * FROM {shed}.{wsStreamTable} WHERE sec_name ILIKE \'{sec_shed}\'"
             query = f"""
-                INSERT INTO {appconfig.dataSchema}.{statTable} (watershed_id, sec_wshed_name)
+                INSERT INTO {dbTargetSchema}.{statTable} (watershed_id, sec_wshed_name)
                 VALUES ('{watershed_id}', '{sec_shed}');
             """
             with connection.cursor() as cursor:
@@ -179,7 +183,7 @@ def runStats():
             for fish in species:
                 col_query = f"""
                     {col_query}
-                    ALTER TABLE {appconfig.dataSchema}.{statTable}
+                    ALTER TABLE {dbTargetSchema}.{statTable}
                     ADD COLUMN IF NOT EXISTS {fish}_accessible_spawn_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_potentially_accessible_spawn_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_accessible_rear_km double precision,
@@ -195,7 +199,7 @@ def runStats():
 
                 fishaccess_query = f"""
                     {fishaccess_query}  
-                    UPDATE {appconfig.dataSchema}.{statTable} 
+                    UPDATE {dbTargetSchema}.{statTable} 
                     SET
                         {fish}_accessible_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                         ,{fish}_potentially_accessible_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
@@ -209,12 +213,12 @@ def runStats():
 
                 fishhabitat_query = f"""
                     {fishhabitat_query}
-                    UPDATE {appconfig.dataSchema}.{statTable}
+                    UPDATE {dbTargetSchema}.{statTable}
                     SET
                         {fish}_total_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                         ,{fish}_total_rear_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                         ,{fish}_total_habitat_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_connectivity_status = (SELECT ({fish}_accessible_habitat_km / ({fish}_accessible_habitat_km + {fish}_potentially_accessible_habitat_km))*100 FROM {appconfig.dataSchema}.{statTable} WHERE sec_wshed_name ILIKE '{sec_shed}')
+                        ,{fish}_connectivity_status = (SELECT ({fish}_accessible_habitat_km / ({fish}_accessible_habitat_km + {fish}_potentially_accessible_habitat_km))*100 FROM {dbTargetSchema}.{statTable} WHERE sec_wshed_name ILIKE '{sec_shed}')
                         ,{fish}_dci = (SELECT coalesce(sum(dci_{fish}) FILTER (WHERE sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                     WHERE watershed_id = '{watershed_id}'
                     AND sec_wshed_name ILIKE '{sec_shed}';
@@ -233,7 +237,7 @@ def runStats():
                 allfishhabitat = makeHabitatClause(allfishhabitat, fish, spawn=True, rear=True)
 
                 allfishaccess_query = f"""
-                    UPDATE {appconfig.dataSchema}.{statTable}
+                    UPDATE {dbTargetSchema}.{statTable}
                     SET 
                         accessible_spawn_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccessspawn}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                         ,accessible_rear_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccessrear}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
@@ -249,7 +253,7 @@ def runStats():
                 """
 
                 query = f"""
-                    UPDATE {appconfig.dataSchema}.{statTable} SET total_km =
+                    UPDATE {dbTargetSchema}.{statTable} SET total_km =
                     (SELECT coalesce(sum(segment_length) FILTER (WHERE sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                     WHERE watershed_id = '{watershed_id}'
                     AND sec_wshed_name ILIKE '{sec_shed}';
