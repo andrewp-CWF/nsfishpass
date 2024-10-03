@@ -38,6 +38,11 @@ def build_views(conn):
 
     global specCodes
 
+    if iniSection == 'cmm':
+        wcrp = 'st_croix'
+    else:
+        wcrp = iniSection
+
     specCodes = [substring.strip() for substring in species.split(',')]
 
     cols = []
@@ -49,15 +54,32 @@ def build_views(conn):
         cursor.execute(query)
     conn.commit()
 
-
+    ## This loop builds the condition with all joins for each species
+    # This way, the passability columns for each species for each barrier will be in the 
+    # view along with stats.
+    # This also joins the ranking tables for each species so they can be viewed in one table
     for i in range(len(specCodes)):
         code = specCodes[i]
         col = f"""
+        b.func_upstr_hab_{code},
         b.total_upstr_hab_{code},
+        r{i}.w_func_upstr_hab_{code},
+        r{i}.w_total_upstr_hab_{code},
+        r{i}.group_id as group_id_{code},
+		r{i}.num_barriers_group as num_barriers_group_{code},
+		r{i}.downstr_group_ids as downstr_group_ids_{code},
+		r{i}.total_hab_gain_group as total_hab_gain_group_{code},
+		r{i}.w_total_hab_gain_group as w_total_hab_gain_group_{code},
+		r{i}.avg_gain_per_barrier as avg_gain_per_barrier_{code},
+		r{i}.w_avg_gain_per_barrier as w_avg_gain_per_barrier_{code},
+		r{i}.rank_w_avg_gain_tiered as rank_w_avg_gain_tiered_{code},
+		r{i}.rank_w_total_upstr_hab as rank_w_total_upstr_hab_{code},
+		r{i}.rank_combined as rank_combined_{code},
         p{i}.passability_status AS passability_status_{code}
         """
         cols.append(col)
         joinString = joinString + f'JOIN {dbTargetSchema}.{dbPassabilityTable} p{i} ON b.id = p{i}.barrier_id\n'
+        joinString = joinString + f'LEFT JOIN {dbTargetSchema}.ranked_barriers_{code}_{wcrp} r{i} ON b.id = r{i}.id\n'
         joinString = joinString + f'JOIN {dbTargetSchema}.fish_species f{i} ON f{i}.id = p{i}.species_id\n'
         if i == 0:
             conditionString = conditionString + f'f{i}.code = \'{code}\'\n'
@@ -109,7 +131,7 @@ def build_views(conn):
         WHERE {conditionString};
     """
 
-    #print(query)
+    # print(query)
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()

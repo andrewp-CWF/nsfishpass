@@ -318,11 +318,13 @@ def main():
                 passability_feature.append(feature[0])
                 passability_feature.append(s[0])
                 # assign passability
-                if feature[3] == 'waterfall' and feature[3]:
-                    if feature[3] >= fall_height_threshold:
-                        passability_feature.append('0')
+                if feature[2] == 'waterfall' and feature[3]:
+                    if float(feature[3]) >= fall_height_threshold:
+                        passability_feature.append('BARRIER')
                     else:
-                        passability_feature.append('1')
+                        passability_feature.append('PASSABLE')
+                elif feature[2] == 'waterfall':     # Waterfalls with unknown height are passable
+                    passability_feature.append('PASSABLE')
                 else:
                     passability_feature.append(feature[1])
                 passability_data.append(passability_feature)
