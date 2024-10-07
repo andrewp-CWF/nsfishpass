@@ -1,67 +1,5 @@
-# cwf-ns
-Store scripts related to habitat modelling in Nova Scotia.
 
-# Overview
-
-This project contains a set of scripts to create and maintain an aquatic connectivity / fish passage database for Nova Scotia to:
-* Track known barriers to fish passage (e.g., dams and stream crossings)
-* Model potential barriers to fish passage (stream gradient, road/rail/trail stream crossings)
-* Model passability/accessibility of streams based on barriers and species swimming ability
-* Model streams with potential for spawning and rearing activity (for select species)
-* Prioritize assessment and remediation of barriers based on modelled accessibility and habitat potential
-
-# Copyright
-
-Copyright 2023 by Canadian Wildlife Federation
-
-# License
-
-Apache License, Version 2.0
-http://www.apache.org/licenses/LICENSE-2.0
-
-# Software Requirements
-* Python (tested with version 3.9.5)
-    * Modules: shapely, psycopg2, tifffile, requests
-    
-    
-* GDAL/OGR (comes installed with QGIS or can install standalone)
-
-* PostgreSQL/PostGIS database
-
-
-
-# Configuration
-All configuration is setup in the config.ini file. Before running any scripts you should ensure the information in this file is correct. 
-
-All of the scripts allow for a custom configuration file to be specified by providing it as the -c argument to the program. If not supplied the default config.ini file will be used. For example:
-
-> prompt> create_db.py -c custom_config.ini
-
-The config.ini and appconfig.py files are included in the /src and /src/processing_scripts folders by default. If you want to run a script from another folder (e.g., src/load_data), you will need to make sure the config.ini and appconfig.py files are in that folder as well.   
-
-We recommend editing a single config.ini file with the configuration parameters you need, then copying this file to the other folders if you want to run individual scripts. 
-
-# Processing
-
-Data Processing takes part in three steps: load raw data, process each watershed, and compute summary statistics. If raw data has already been loaded for a watershed, you can run the analysis portions only using src/run_analysis.py.
-
-
-## 1 - Loading Raw Data
-
-The first step is to populate the database with the required data. These load scripts are specific to the data provided for Nova Scotia. Different source data will require modifications to these scripts.
-
-**Scripts**
-* load_data/create_db.py -> this script creates all the necessary database tables. A database must already exist for these tables to be created in. 
-  This will also drop existing tables if the model already has data in it. This should only be run on model initialization.
-* load_data/load_data.py -> this script uses OGR to load data for Nova Scotia road, trail, and stream networks from a gdb file into the PostgreSQL database.
-
-**Running the Scripts**  
-* create_db.py -c config.ini  
-* load_data.py -c config.ini
-
-You will be prompted to enter a username and password to access the nsfishpass database.
-
-## 2 - Watershed Processing
+# Watershed Processing (Running the model)
 
 Processing is completed by watershed id. Each watershed is processed into a separate schema in the database. The watershed configuration must be specified in the ini file and the configuration to be used provided to the script (see below).
 
@@ -90,57 +28,6 @@ Currently processing includes:
 * Rank barriers
 * Create views
 
-**Main Script**
-
-****All existing data in the output schema and tables will be deleted when you run this full script.**
-
-process_watershed.py -c config.ini [watershedid]
-
-The watershedid field must be specified as a section header in the config.ini file. The section must describe the watershed processing details. For example:
-
-[cmm]    
-#NS: cmm    
-watershed_id = ["01dd000","01de000","01df000"]    
-nhn_watershed_id = ["01dd000","01de000","01df000"]    
-output_schema = cmm    
-fish_observation_data = C:\\temp\\ns_model_testing\\fish_observations.gpkg     
-habitat_access_updates = C:\\temp\\ns_model_testing\\habitat_access_updates.gpkg      
-barrier_updates = C:\\temp\\ns_model_testing\\barrier_updates.gpkg          
-watershed_table = cmm_watersheds
-
-**Input Requirements**
-
-* Directory of tif images representing DEM files. All files should have the same projection and resolution. The scripts assume this data is in an equal length projection so the st_length2d(geometry) function returns the length in metres. This should be specified in the config file under [ELEVATION_PROCESSING] as the dem_directory variable.
-
-* A raw streams table with id (uuid), name (varchar), strahler order (integer), watershed_id (varchar), and geometry (linestring) fields. This should be loaded into the database with the correct format if you have run load_data.py.
-
-**Output**
-
-* A new schema with a streams table, barrier, modelled crossings and other output tables.  
-
-## 3 - Compute Summary Statistics
-
-Summary statistics can be computed across multiple watersheds. The watersheds to be processed are specified in config.ini, for example:
-
-watershed_data_schemas=ws01cd000,ws02cd000
-
-Summary statistics will also be calculated for each watershed and for each species
-
-**Main Script**
-
-compute_watershed_stats.py -c config.ini
-
-**Input Requirements**
-
-* This scripts reads fields from the processed watershed data in the various schemas.   
-
-**Output**
-
-* A new table raw_data.watershed_stats that contains various watershed statistics
-
-
- 
----
 #  Individual Processing Scripts
 
 These scripts are the individual processing scripts that are used for the watershed processing steps.
