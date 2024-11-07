@@ -68,6 +68,30 @@ This script loads dam barriers from the CABD API where use_analysis = true.
 
 By default, the script uses the nhn_watershed_id from config.ini for the subject watershed(s) to retrieve features from the API. You can have multiple nhn_watershed_ids specified in the config file as long as they are formatted as a list, e.g., ["01dd000","01de000","01df000"].
 
+**Process**
+The Script first drops views created in barrier_passability_view.py since those views depend on tables created in this script.
+
+The fish species table is loaded into the wcrp schema.
+
+The barriers table is created which will hold dams and waterfalls pulled from the CABD along with modelled crossings which will be generated in a later script.
+
+The waterfalls table is created which will only hold waterfalls. In the future, this will be the only place for waterfalls and they will be separated out of barriers but waterfalls are also loaded into barriers since all the calculations work out with the barriers table.
+
+The passability table is created. This table stores the passability for each species for each barrier. This means that each barrier has a record in this table for each species which tracks the passability of that species for that barrier. For example, if there are two species of interest in the watershed, each barrier will have two records in the table.
+
+The CABD API is queried to get dam data which is loaded into the barriers table.
+
+The CABD API is queried to get waterfall data which is loaded into the barriers table and the waterfalls table.
+
+Barriers in the barriers table are snapped to the stream network.
+Waterfalls are snapped to the stream network in the waterfalls table.
+
+Secondary watershed values are defined. By default, this is the same as the wcrp primary watershed name. For CMM, there are 3 secondary watersheds necessitating this part of the script.
+
+Passability values are loaded into the passability table. In the CABD, passability is assigned with a string value 'BARRIER' or 'PASSABLE'. This is translated into 1 and 0 respectively. For waterfalls, the height thresholds are taken from the fish_species table and the passability is assigned by species based on these for each waterfall. 
+
+Passability column is dropped from the barriers table since the info is now in the barrier_passability table.
+
 **Script**
 
 load_and_snap_barriers_cabd.py -c config.ini [watershedid]
@@ -80,10 +104,15 @@ load_and_snap_barriers_cabd.py -c config.ini [watershedid]
 **Output**
 
 * A new barrier table populated with dam barriers from the CABD API
+* Fish species table with information on each species of interest
+* A waterfalls table populated with waterfalls from the CABD API
+* A barrier_passability table populated with the passability of each barrier for each species (one entry for each barrier-species pair)
 * The barrier table has two geometry fields - the raw field and a snapped field (the geometry snapped to the stream network). The maximum snapping distance is specified in the configuration file.
 
 ---
 #### 3 - Load and snap fish observation data
+
+NOT USED IN NSFISHPASS
 
 Loads fish observation or habitat data provided and snaps it to the stream network. This data can be used by later scripts to override accessibility or habitat calculations. For instance, you can mark a stream segment as accessible because fish have been observed there, even if the accessibility model would have marked that segment as inaccessible.
 

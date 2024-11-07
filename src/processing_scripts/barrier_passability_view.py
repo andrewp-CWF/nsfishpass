@@ -46,7 +46,7 @@ def build_views(conn):
 
 
     query = f""" 
-        DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; 
+        DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view CASCADE; 
         DROP VIEW IF EXISTS {dbTargetSchema}.natural_barriers_vw;
     """
     with conn.cursor() as cursor:
@@ -94,8 +94,8 @@ def build_views(conn):
         rank_join = f'LEFT JOIN {dbTargetSchema}.ranked_barriers_{code}_{wcrp} r{i} ON b.id = r{i}.id\n'
         species_join = f'JOIN {dbTargetSchema}.fish_species f{i} ON f{i}.id = p{i}.species_id\n'
 
-        joinString = pass_join + rank_join + species_join
-        nat_joinstring = pass_join + species_join
+        joinString = joinString + pass_join + rank_join + species_join
+        nat_joinstring = nat_joinstring + pass_join + species_join
 
         if i == 0:
             conditionString = conditionString + f'f{i}.code = \'{code}\'\n'
@@ -157,11 +157,11 @@ def build_views(conn):
         CREATE VIEW {dbTargetSchema}.natural_barriers_vw AS
         with gradients as (
             select b.id, b.type, b.point
-            from cheticamp.break_points b
+            from {dbTargetSchema}.break_points b
             where type = 'gradient_barrier'
         ), falls as (
             select w.id, w.type, w.snapped_point as point
-            from cheticamp.barriers w
+            from {dbTargetSchema}.barriers w
             where w.type = 'waterfall'
         ), nat_barriers as (
             SELECT *
@@ -182,6 +182,14 @@ def build_views(conn):
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
+
+    query = f"""
+        select join_tracking_table_crossings_vw(%s, %s);
+    """
+    with conn.cursor() as cursor:
+        cursor.execute(query, (iniSection, specCodes))
+    conn.commit()
+
 
 
 def main():
