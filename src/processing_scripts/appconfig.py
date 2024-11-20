@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 #----------------------------------------------------------------------------------
+#
+# This script parses the config file and connects to the database.
+# Other scripts use the ConfigParser from this module to parse the config file
+#
+#
 
 import configparser
 import os
@@ -64,11 +69,12 @@ dbIdField = "id"
 dbGeomField = "geometry"
 dbWatershedIdField = "watershed_id"
 watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
+tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
 
 class Accessibility(enum.Enum):
-    ACCESSIBLE = 'ACCESSIBLE'
-    POTENTIAL = 'POTENTIALLY ACCESSIBLE'
-    NOT = 'NOT ACCESSIBLE'
+    ACCESSIBLE = 'CONNECTED NATURALLY ACCESSIBLE WATERBODIES'
+    POTENTIAL = 'DISCONNECTED NATURALLY ACCESSIBLE WATERBODIES'
+    NOT = 'NATURALLY INACCESSIBLE WATERBODIES'
 
 
 print(f"""--- Configuration Settings Begin ---

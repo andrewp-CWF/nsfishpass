@@ -35,10 +35,15 @@ else:
 
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
+secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 
 publicSchema = "public"
 aoi = "chyf_aoi"
 aoiTable = publicSchema + "." + aoi
+
+# stream order segment weighting
+w1 = 0.25
+w2 = 0.75
 
 def main():
 
@@ -70,9 +75,12 @@ def main():
               {appconfig.dbIdField} uuid not null,
               source_id uuid not null,
               {appconfig.dbWatershedIdField} varchar not null,
+              sec_code varchar,
+              sec_name varchar,
               stream_name varchar,
               strahler_order integer,
               segment_length double precision,
+              w_segment_length double precision,
               geometry geometry(LineString, {appconfig.dataSrid}),
               primary key ({appconfig.dbIdField})
             );
@@ -85,9 +93,9 @@ def main():
             ALTER DEFAULT PRIVILEGES IN SCHEMA {dbTargetSchema} GRANT SELECT ON TABLES TO public;
 
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
-                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, 
-                stream_name, strahler_order, geometry)
-            SELECT gen_random_uuid(), t1.id, t1.aoi_id,
+                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}
+                ,stream_name, strahler_order, geometry)
+            SELECT DISTINCT ON (t1.id) gen_random_uuid(), t1.id, t1.aoi_id,
                 t1.rivername1, t1.strahler_order,
                 (ST_Dump((ST_Intersection(t1.geometry, t2.geometry)))).geom
             FROM {appconfig.dataSchema}.{appconfig.streamTable} t1
@@ -96,6 +104,11 @@ def main():
 
             -------------------------
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set segment_length = st_length2d(geometry) / 1000.0;
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} set w_segment_length = (case strahler_order 
+                                                                                    when 1 then segment_length * {w1}
+                                                                                    when 2 then segment_length * {w2}
+                                                                                    else segment_length
+                                                                                    end);
             ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} add column geometry_original geometry(LineString, {appconfig.dataSrid});
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry_original = geometry;
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
@@ -114,10 +127,23 @@ def main():
             ALTER TABLE  {dbTargetSchema}.{dbTargetStreamTable} OWNER TO cwf_analyst;
        
         """
-        
+        #print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
+
+        if secondaryWatershedTable != 'None':
+            query = f"""
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} s
+            SET 
+                sec_code = t3.SEC_CODE,
+                sec_name = t3.SEC_NAME
+            FROM {appconfig.dataSchema}.{secondaryWatershedTable} t3 
+            WHERE ST_Intersects(s.geometry, t3.geometry)
+            """
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+            conn.commit()
         
     print(f"""Initializing processing for watershed {workingWatershedId} complete.""")
 
